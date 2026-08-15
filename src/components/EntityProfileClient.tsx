@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ThreadinaryLogo } from "./ThreadinaryLogo";
 import { EditEntityModal } from "./EditEntityModal";
+import { SmartEntityPickerWithFilters } from "./SmartEntityPickerWithFilters";
 import {
   ArrowLeft,
   Trash2,
@@ -987,19 +988,14 @@ export function EntityProfileClient({
                 </div>
 
                 {targetMode === "select" ? (
-                  <select
-                    className="form-input text-xs"
-                    value={selectedTargetId}
-                    onChange={(e) => setSelectedTargetId(e.target.value)}
-                    required={targetMode === "select"}
-                  >
-                    <option value="">-- Pilih Target Entity --</option>
-                    {candidateTargets.map((e) => (
-                      <option key={e.id} value={e.id}>
-                        {e.name} ({e.type?.name || "Entity"})
-                      </option>
-                    ))}
-                  </select>
+                  <SmartEntityPickerWithFilters
+                    entities={allEntities}
+                    entityTypes={entityTypes}
+                    selectedEntityId={selectedTargetId}
+                    onSelectEntity={(id) => setSelectedTargetId(id)}
+                    placeholder="Cari Target Entity..."
+                    excludeEntityId={entityId}
+                  />
                 ) : (
                   <div className="p-3.5 rounded-xl bg-[var(--bg)] border border-[var(--border)] flex flex-col gap-3">
                     <div className="form-group">

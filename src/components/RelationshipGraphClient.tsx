@@ -21,6 +21,7 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import { ThreadinaryLogo } from "./ThreadinaryLogo";
+import { SmartEntityPickerWithFilters } from "./SmartEntityPickerWithFilters";
 import {
   ArrowLeft,
   Search,
@@ -91,145 +92,202 @@ const QUICK_CHIP_LABELS = [
   "Partner",
 ];
 
-// Helper icon by entity type name
-function getTypeIcon(typeName?: string) {
+// Helper: HIGH CONTRAST & DISTINCT TYPE COLOR THEMES
+function getTypeTheme(typeName?: string) {
   const name = typeName?.toLowerCase() || "";
-  if (name.includes("character")) return User;
-  if (name.includes("location")) return MapPin;
-  if (name.includes("organization")) return Building;
-  if (name.includes("object")) return Package;
-  return Sparkles;
+  if (name.includes("character")) {
+    return {
+      icon: User,
+      badgeBg: "#F0DDCB",
+      badgeColor: "#9A4B1C",
+      borderColor: "#C97B4A",
+      topBarColor: "#C97B4A",
+      cardBg: "var(--surface)",
+      label: "Character",
+    };
+  }
+  if (name.includes("location")) {
+    return {
+      icon: MapPin,
+      badgeBg: "#E3E9DD",
+      badgeColor: "#3B522F",
+      borderColor: "#5B734B",
+      topBarColor: "#5B734B",
+      cardBg: "var(--surface)",
+      label: "Location",
+    };
+  }
+  if (name.includes("organization")) {
+    return {
+      icon: Building,
+      badgeBg: "#FEF3C7",
+      badgeColor: "#92400E",
+      borderColor: "#D97706",
+      topBarColor: "#D97706",
+      cardBg: "var(--surface)",
+      label: "Organization",
+    };
+  }
+  if (name.includes("object")) {
+    return {
+      icon: Package,
+      badgeBg: "#FEE2E2",
+      badgeColor: "#991B1B",
+      borderColor: "#DC2626",
+      topBarColor: "#DC2626",
+      cardBg: "var(--surface)",
+      label: "Object",
+    };
+  }
+  // Concept / Generic
+  return {
+    icon: Sparkles,
+    badgeBg: "#EDE9FE",
+    badgeColor: "#5B21B6",
+    borderColor: "#7C3AED",
+    topBarColor: "#7C3AED",
+    cardBg: "var(--surface)",
+    label: typeName || "Concept",
+  };
 }
 
-// Custom Compact Node Component with Uncut Type Badge
+// Custom Compact Node Component with HIGH-CONTRAST DISTINCT STYLING
 function MindMapEntityNode({ data }: { data: any }) {
   const typeName = data.entity?.type?.name || "Generic";
-  const TypeIcon = getTypeIcon(typeName);
+  const theme = getTypeTheme(typeName);
+  const TypeIcon = theme.icon;
   const isCenterFocus = data.isCenterFocus;
   const isExpanded = data.isExpanded;
   const hasSubConnections = data.hasSubConnections;
   const isSelected = data.isSelected;
 
-  const bgBadge =
-    typeName === "Character"
-      ? "var(--accent-soft)"
-      : typeName === "Location"
-      ? "var(--sage-soft)"
-      : typeName === "Concept"
-      ? "var(--rose-soft)"
-      : "var(--accent-soft)";
-
-  const colorBadge =
-    typeName === "Character"
-      ? "var(--accent)"
-      : typeName === "Location"
-      ? "var(--sage)"
-      : typeName === "Concept"
-      ? "var(--rose)"
-      : "var(--accent)";
-
   return (
     <div
-      className={`relative px-4 py-3 rounded-2xl bg-[var(--surface)] border transition-all duration-200 cursor-pointer shadow-md select-none ${
+      className={`relative px-4 py-3 rounded-2xl bg-[var(--surface)] transition-all duration-200 cursor-pointer shadow-md select-none overflow-hidden ${
         isSelected
-          ? "border-[var(--accent)] ring-4 ring-[var(--accent-soft)] shadow-xl scale-105"
+          ? "ring-4 shadow-xl scale-105"
           : isCenterFocus
-          ? "border-[var(--accent)] ring-2 ring-[var(--accent-soft)] shadow-md"
-          : "border-[var(--border)] hover:border-[var(--accent)] hover:shadow-lg"
+          ? "ring-3 shadow-md"
+          : "hover:shadow-lg"
       }`}
       style={{
-        minWidth: "170px",
+        minWidth: "180px",
         maxWidth: "230px",
+        borderWidth: "2px",
+        borderStyle: "solid",
+        borderColor: isSelected || isCenterFocus ? theme.borderColor : theme.borderColor,
+        boxShadow: isSelected
+          ? `0 0 0 4px ${theme.badgeBg}`
+          : isCenterFocus
+          ? `0 0 0 3px ${theme.badgeBg}`
+          : undefined,
       }}
     >
-      {/* Handles for Nearest Smart Side Edge Connections */}
+      {/* Thick Left Accent Bar by Entity Type */}
+      <div
+        className="absolute top-0 bottom-0 left-0 w-2"
+        style={{ backgroundColor: theme.topBarColor }}
+      />
+
+      {/* 4 Handles for Nearest Smart Side Edge Connections */}
       <Handle
         type="target"
         position={Position.Top}
         id="top-target"
-        className="w-2 h-2 !bg-[var(--accent)] !border-1 !border-[var(--surface)]"
+        className="w-2.5 h-2.5 !border-2 !border-[var(--surface)]"
+        style={{ backgroundColor: theme.borderColor }}
       />
       <Handle
         type="source"
         position={Position.Top}
         id="top-source"
-        className="w-2 h-2 !bg-[var(--accent)] !border-1 !border-[var(--surface)]"
+        className="w-2.5 h-2.5 !border-2 !border-[var(--surface)]"
+        style={{ backgroundColor: theme.borderColor }}
       />
 
       <Handle
         type="target"
         position={Position.Bottom}
         id="bottom-target"
-        className="w-2 h-2 !bg-[var(--accent)] !border-1 !border-[var(--surface)]"
+        className="w-2.5 h-2.5 !border-2 !border-[var(--surface)]"
+        style={{ backgroundColor: theme.borderColor }}
       />
       <Handle
         type="source"
         position={Position.Bottom}
         id="bottom-source"
-        className="w-2 h-2 !bg-[var(--accent)] !border-1 !border-[var(--surface)]"
+        className="w-2.5 h-2.5 !border-2 !border-[var(--surface)]"
+        style={{ backgroundColor: theme.borderColor }}
       />
 
       <Handle
         type="target"
         position={Position.Left}
         id="left-target"
-        className="w-2 h-2 !bg-[var(--accent)] !border-1 !border-[var(--surface)]"
+        className="w-2.5 h-2.5 !border-2 !border-[var(--surface)]"
+        style={{ backgroundColor: theme.borderColor }}
       />
       <Handle
         type="source"
         position={Position.Left}
         id="left-source"
-        className="w-2 h-2 !bg-[var(--accent)] !border-1 !border-[var(--surface)]"
+        className="w-2.5 h-2.5 !border-2 !border-[var(--surface)]"
+        style={{ backgroundColor: theme.borderColor }}
       />
 
       <Handle
         type="target"
         position={Position.Right}
         id="right-target"
-        className="w-2 h-2 !bg-[var(--accent)] !border-1 !border-[var(--surface)]"
+        className="w-2.5 h-2.5 !border-2 !border-[var(--surface)]"
+        style={{ backgroundColor: theme.borderColor }}
       />
       <Handle
         type="source"
         position={Position.Right}
         id="right-source"
-        className="w-2 h-2 !bg-[var(--accent)] !border-1 !border-[var(--surface)]"
+        className="w-2.5 h-2.5 !border-2 !border-[var(--surface)]"
+        style={{ backgroundColor: theme.borderColor }}
       />
 
       {/* Floating Center Focus Badge */}
       {isCenterFocus && (
-        <span className="absolute -top-2.5 right-3 text-[8px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[var(--accent)] text-white shadow-sm border border-white">
+        <span className="absolute top-2 right-2 text-[8px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[var(--accent)] text-white shadow-sm border border-white">
           PUSAT
         </span>
       )}
 
-      {/* Type Badge Row */}
-      <div className="flex items-center gap-1.5 mb-1.5 overflow-hidden">
+      {/* Type Badge Row with Distinct High-Contrast Theme Colors */}
+      <div className="flex items-center gap-1.5 mb-1.5 pl-1 overflow-hidden">
         <div
           className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] shrink-0 font-bold"
-          style={{ backgroundColor: bgBadge, color: colorBadge }}
+          style={{ backgroundColor: theme.badgeBg, color: theme.badgeColor }}
         >
           <TypeIcon size={12} />
         </div>
         <span
           className="text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full whitespace-nowrap"
-          style={{ backgroundColor: bgBadge, color: colorBadge }}
+          style={{ backgroundColor: theme.badgeBg, color: theme.badgeColor }}
         >
           {typeName}
         </span>
       </div>
 
-      <h4 className="font-serif font-semibold text-xs text-[var(--text)] truncate mb-0.5">
+      <h4 className="font-serif font-semibold text-xs text-[var(--text)] truncate mb-0.5 pl-1">
         {data.entity.name}
       </h4>
 
       {data.entity.description && (
-        <p className="text-[10px] text-[var(--text-secondary)] line-clamp-1 leading-snug">
+        <p className="text-[10px] text-[var(--text-secondary)] line-clamp-1 leading-snug pl-1">
           {data.entity.description}
         </p>
       )}
 
       {!isCenterFocus && hasSubConnections && (
-        <div className="mt-1.5 pt-1 border-t border-[var(--border)] flex items-center justify-between text-[9.5px] text-[var(--accent)] font-medium">
+        <div
+          className="mt-1.5 pt-1 border-t border-[var(--border)] flex items-center justify-between text-[9.5px] font-bold pl-1"
+          style={{ color: theme.badgeColor }}
+        >
           <span>{isExpanded ? "Cabang Terbuka" : "Klik untuk ekspand"}</span>
           <ChevronRight
             size={11}
@@ -279,8 +337,8 @@ function GraphFlowCanvas({
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
-  // Persistent User Dragged & Computed Node Positions Map
-  const nodePositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  // User Dragged Positions Map (Only stores user manual drag overrides!)
+  const userDraggedPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
 
   // Add Relationship Modal State
   const [isAddRelModalOpen, setIsAddRelModalOpen] = useState(false);
@@ -318,7 +376,7 @@ function GraphFlowCanvas({
         setCenterFocusId(targetFocus);
         setActiveHighlightNodeId(targetFocus);
         setExpandedNodeIds(new Set());
-        nodePositionsRef.current = new Map();
+        userDraggedPositionsRef.current = new Map();
       }
     }
   }, [focusQuery, initialFocus, entities]);
@@ -383,8 +441,7 @@ function GraphFlowCanvas({
     document.documentElement.setAttribute("data-theme", nextTheme);
   };
 
-  // STRICT Filtered Key Entities for Dropdown "Pusat Utama":
-  // MUST BE Character AND MUST HAVE TAGS! (Or currently active center focus)
+  // STRICT Filtered Key Entities for Dropdown "Pusat Utama"
   const dropdownKeyEntities = useMemo(() => {
     return entities.filter((e) => {
       const isChar = e.type?.name?.toLowerCase() === "character";
@@ -424,7 +481,21 @@ function GraphFlowCanvas({
     return map;
   }, [entities, relationships]);
 
-  // Compute visible node IDs: Center focus + Level 1 + Level 2 of expanded nodes
+  // Map of relationship labels between any pair of entities
+  const entityPairRelMap = useMemo(() => {
+    const map = new Map<string, string[]>();
+    relationships.forEach((r) => {
+      const key1 = `${r.sourceEntityId}__${r.targetEntityId}`;
+      const key2 = `${r.targetEntityId}__${r.sourceEntityId}`;
+      if (!map.has(key1)) map.set(key1, []);
+      if (!map.has(key2)) map.set(key2, []);
+      map.get(key1)!.push(r.label);
+      map.get(key2)!.push(r.label);
+    });
+    return map;
+  }, [relationships]);
+
+  // Compute visible node IDs
   const { visibleNodeIds, level1NodeIds, level2NodeIds } = useMemo(() => {
     if (!centerFocusId) {
       return {
@@ -453,7 +524,7 @@ function GraphFlowCanvas({
     return { visibleNodeIds: allVisible, level1NodeIds: level1, level2NodeIds: level2 };
   }, [centerFocusId, expandedNodeIds, entityConnectionsMap]);
 
-  // OUTWARD RADIAL ANGLE SPACING LAYOUT COMPUTATION
+  // DYNAMIC RADIAL LAYOUT COMPUTATION WITH GENEROUS SPACING (PREVENTS OVERLAPS)
   useEffect(() => {
     if (!centerFocusId || entities.length === 0) {
       setNodes([]);
@@ -463,51 +534,73 @@ function GraphFlowCanvas({
 
     const centerX = 400;
     const centerY = 300;
-    const positions = nodePositionsRef.current;
+    const computedPositions = new Map<string, { x: number; y: number }>();
+    const userDragged = userDraggedPositionsRef.current;
 
-    if (!positions.has(centerFocusId)) {
-      positions.set(centerFocusId, { x: centerX, y: centerY });
-    }
+    computedPositions.set(centerFocusId, userDragged.get(centerFocusId) || { x: centerX, y: centerY });
 
     const level1List = Array.from(level1NodeIds);
     const l1Count = level1List.length;
-    const radiusL1 = 260;
+
+    // Measure maximum relationship label length to ensure plenty of clearance between cards!
+    let maxL1LabelLen = 8;
+    level1List.forEach((id) => {
+      const labels = entityPairRelMap.get(`${centerFocusId}__${id}`) || [];
+      labels.forEach((lbl) => {
+        if (lbl.length > maxL1LabelLen) maxL1LabelLen = lbl.length;
+      });
+    });
+
+    // Generous radial distance (minimum 420px up to 580px for long labels!)
+    const radiusL1 = Math.max(420, 320 + maxL1LabelLen * 6.5);
 
     level1List.forEach((id, idx) => {
-      if (!positions.has(id)) {
+      if (userDragged.has(id)) {
+        computedPositions.set(id, userDragged.get(id)!);
+      } else {
         const angle = (idx / Math.max(1, l1Count)) * 2 * Math.PI - Math.PI / 2;
         const spreadX = centerX + radiusL1 * Math.cos(angle);
         const spreadY = centerY + radiusL1 * Math.sin(angle);
-        positions.set(id, { x: spreadX, y: spreadY });
+        computedPositions.set(id, { x: spreadX, y: spreadY });
       }
     });
 
     const level2List = Array.from(level2NodeIds);
     level2List.forEach((id, idx) => {
-      if (!positions.has(id)) {
+      if (userDragged.has(id)) {
+        computedPositions.set(id, userDragged.get(id)!);
+      } else {
         let parentId = Array.from(expandedNodeIds).find((expId) =>
           entityConnectionsMap.get(expId)?.has(id)
         );
-        const parentPos = (parentId && positions.get(parentId)) || { x: centerX, y: centerY - radiusL1 };
+        const parentPos = (parentId && computedPositions.get(parentId)) || { x: centerX, y: centerY - radiusL1 };
 
         const dx = parentPos.x - centerX;
         const dy = parentPos.y - centerY;
         const baseAngle = Math.atan2(dy, dx);
 
-        const spreadOffset = (idx % 2 === 0 ? 0.5 : -0.5) * (Math.floor(idx / 2) + 1);
+        const spreadOffset = (idx % 2 === 0 ? 0.45 : -0.45) * (Math.floor(idx / 2) + 1);
         const fanAngle = baseAngle + spreadOffset;
-        const distance = 240;
+
+        let maxL2LabelLen = 8;
+        if (parentId) {
+          const labels = entityPairRelMap.get(`${parentId}__${id}`) || [];
+          labels.forEach((lbl) => {
+            if (lbl.length > maxL2LabelLen) maxL2LabelLen = lbl.length;
+          });
+        }
+        const distance = Math.max(380, 290 + maxL2LabelLen * 6);
 
         const subX = parentPos.x + distance * Math.cos(fanAngle);
         const subY = parentPos.y + distance * Math.sin(fanAngle);
-        positions.set(id, { x: subX, y: subY });
+        computedPositions.set(id, { x: subX, y: subY });
       }
     });
 
     // Build ReactFlow Nodes
     const flowNodes: Node[] = Array.from(visibleNodeIds).map((id) => {
       const ent = entities.find((e) => e.id === id);
-      const pos = positions.get(id) || { x: centerX, y: centerY };
+      const pos = computedPositions.get(id) || { x: centerX, y: centerY };
 
       const isCenter = id === centerFocusId;
       const isSelected = activeHighlightNodeId === id;
@@ -529,13 +622,13 @@ function GraphFlowCanvas({
       };
     });
 
-    // Build Straight Edges with SMART NEAREST SIDES & HIGHLIGHT STATE
+    // Build Straight Edges with SMART NEAREST SIDES & UNCLIPPED COMPACT LABELS
     const flowEdges: Edge[] = [];
 
     relationships.forEach((rel) => {
       if (visibleNodeIds.has(rel.sourceEntityId) && visibleNodeIds.has(rel.targetEntityId)) {
-        const sourcePos = positions.get(rel.sourceEntityId) || { x: 0, y: 0 };
-        const targetPos = positions.get(rel.targetEntityId) || { x: 0, y: 0 };
+        const sourcePos = computedPositions.get(rel.sourceEntityId) || { x: 0, y: 0 };
+        const targetPos = computedPositions.get(rel.targetEntityId) || { x: 0, y: 0 };
 
         const dx = targetPos.x - sourcePos.x;
         const dy = targetPos.y - sourcePos.y;
@@ -565,35 +658,40 @@ function GraphFlowCanvas({
           activeHighlightNodeId !== null &&
           (rel.sourceEntityId === activeHighlightNodeId || rel.targetEntityId === activeHighlightNodeId);
 
+        // Truncate label cleanly if excessively long to guarantee no clipping!
+        const displayLabel =
+          rel.label.length > 32 ? `${rel.label.substring(0, 30)}...` : rel.label;
+
         flowEdges.push({
           id: rel.id,
           source: rel.sourceEntityId,
           target: rel.targetEntityId,
           sourceHandle,
           targetHandle,
-          label: rel.label,
+          label: displayLabel,
           type: "straight",
           animated: isActiveEdge,
           style: {
             stroke: isActiveEdge ? "var(--accent)" : "var(--border)",
             strokeWidth: isActiveEdge ? 2.5 : 1.5,
             strokeDasharray: isActiveEdge ? "6 6" : undefined,
-            opacity: activeHighlightNodeId === null ? 0.75 : isActiveEdge ? 1 : 0.25,
+            opacity: activeHighlightNodeId === null ? 0.85 : isActiveEdge ? 1 : 0.25,
           },
           labelStyle: {
-            fill: isActiveEdge ? "var(--accent)" : "var(--text-secondary)",
-            fontWeight: isActiveEdge ? 700 : 500,
-            fontSize: 10.5,
+            fill: isActiveEdge ? "var(--accent)" : "var(--text)",
+            fontWeight: isActiveEdge ? 700 : 600,
+            fontSize: 10,
             fontFamily: "var(--font-inter, sans-serif)",
           },
           labelBgStyle: {
             fill: "var(--surface)",
-            fillOpacity: 0.95,
-            rx: 6,
-            ry: 6,
+            fillOpacity: 0.98,
+            rx: 8,
+            ry: 8,
             stroke: isActiveEdge ? "var(--accent)" : "var(--border)",
-            strokeWidth: 1,
+            strokeWidth: 1.2,
           },
+          labelBgPadding: [8, 5],
           markerEnd: {
             type: MarkerType.ArrowClosed,
             width: 13,
@@ -606,22 +704,22 @@ function GraphFlowCanvas({
 
     setNodes(flowNodes);
     setEdges(flowEdges);
-  }, [centerFocusId, visibleNodeIds, level1NodeIds, level2NodeIds, expandedNodeIds, activeHighlightNodeId, entities, relationships, entityConnectionsMap]);
+  }, [centerFocusId, visibleNodeIds, level1NodeIds, level2NodeIds, expandedNodeIds, activeHighlightNodeId, entities, relationships, entityConnectionsMap, entityPairRelMap]);
 
   // Handle Focus Change
   const changeCenterFocus = (newFocusId: string) => {
     setCenterFocusId(newFocusId);
     setActiveHighlightNodeId(newFocusId);
     setExpandedNodeIds(new Set());
-    nodePositionsRef.current = new Map();
+    userDraggedPositionsRef.current = new Map();
 
-    const pos = nodePositionsRef.current.get(newFocusId) || { x: 400, y: 300 };
+    const pos = { x: 400, y: 300 };
     setCenter(pos.x + 80, pos.y + 40, { duration: 600, zoom: 1 });
   };
 
   // Handle Node Position Dragging (Persists dragged coordinates)
   const onNodeDragStop = useCallback((_: React.MouseEvent, node: Node) => {
-    nodePositionsRef.current.set(node.id, { x: node.position.x, y: node.position.y });
+    userDraggedPositionsRef.current.set(node.id, { x: node.position.x, y: node.position.y });
   }, []);
 
   // Node Click Interaction with SMOOTH AUTO-PAN CENTERING CAMERA (§8)
@@ -629,7 +727,7 @@ function GraphFlowCanvas({
     (_: React.MouseEvent, node: Node) => {
       setActiveHighlightNodeId(node.id);
 
-      const pos = nodePositionsRef.current.get(node.id) || node.position;
+      const pos = userDraggedPositionsRef.current.get(node.id) || node.position;
       setCenter(pos.x + 80, pos.y + 40, { duration: 600, zoom: 1 });
 
       if (node.id !== centerFocusId) {
@@ -873,6 +971,7 @@ function GraphFlowCanvas({
                 onClick={() => {
                   setExpandedNodeIds(new Set());
                   setActiveHighlightNodeId(null);
+                  userDraggedPositionsRef.current = new Map();
                 }}
               >
                 <RotateCcw size={13} />
@@ -999,7 +1098,7 @@ function GraphFlowCanvas({
                             className="font-semibold text-[var(--text)] hover:underline cursor-pointer truncate"
                             onClick={() => {
                               setActiveHighlightNodeId(rel.targetEntityId);
-                              const pos = nodePositionsRef.current.get(rel.targetEntityId);
+                              const pos = userDraggedPositionsRef.current.get(rel.targetEntityId);
                               if (pos) setCenter(pos.x + 80, pos.y + 40, { duration: 600, zoom: 1 });
                             }}
                           >
@@ -1027,7 +1126,7 @@ function GraphFlowCanvas({
                             className="font-semibold text-[var(--text)] hover:underline cursor-pointer truncate"
                             onClick={() => {
                               setActiveHighlightNodeId(rel.sourceEntityId);
-                              const pos = nodePositionsRef.current.get(rel.sourceEntityId);
+                              const pos = userDraggedPositionsRef.current.get(rel.sourceEntityId);
                               if (pos) setCenter(pos.x + 80, pos.y + 40, { duration: 600, zoom: 1 });
                             }}
                           >
@@ -1106,38 +1205,25 @@ function GraphFlowCanvas({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="form-group">
                   <label>Source Entity *</label>
-                  <select
-                    className="form-input text-xs"
-                    value={relSourceId}
-                    onChange={(e) => setRelSourceId(e.target.value)}
-                    required
-                  >
-                    <option value="">-- Pilih Source --</option>
-                    {entities.map((e) => (
-                      <option key={e.id} value={e.id}>
-                        {e.name} ({e.type?.name || "Entity"})
-                      </option>
-                    ))}
-                  </select>
+                  <SmartEntityPickerWithFilters
+                    entities={entities}
+                    entityTypes={entityTypes}
+                    selectedEntityId={relSourceId}
+                    onSelectEntity={(id) => setRelSourceId(id)}
+                    placeholder="Cari Source Entity..."
+                  />
                 </div>
 
                 <div className="form-group">
                   <label>Target Entity *</label>
-                  <select
-                    className="form-input text-xs"
-                    value={relTargetId}
-                    onChange={(e) => setRelTargetId(e.target.value)}
-                    required
-                  >
-                    <option value="">-- Pilih Target --</option>
-                    {entities
-                      .filter((e) => e.id !== relSourceId)
-                      .map((e) => (
-                        <option key={e.id} value={e.id}>
-                          {e.name} ({e.type?.name || "Entity"})
-                        </option>
-                      ))}
-                  </select>
+                  <SmartEntityPickerWithFilters
+                    entities={entities}
+                    entityTypes={entityTypes}
+                    selectedEntityId={relTargetId}
+                    onSelectEntity={(id) => setRelTargetId(id)}
+                    placeholder="Cari Target Entity..."
+                    excludeEntityId={relSourceId}
+                  />
                 </div>
               </div>
 

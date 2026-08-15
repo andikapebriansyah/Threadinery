@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { ThreadinaryLogo } from "./ThreadinaryLogo";
+import { SmartEntityPickerWithFilters } from "./SmartEntityPickerWithFilters";
 import {
   ArrowLeft,
   Calendar,
@@ -1298,8 +1299,9 @@ export function EventsClient({ projectId, projectName, user }: EventsClientProps
                 </div>
 
                 <div className="flex flex-col sm:flex-row gap-2 mb-2">
-                  <SearchableEntityPicker
+                  <SmartEntityPickerWithFilters
                     entities={allEntities}
+                    entityTypes={entityTypes}
                     selectedEntityId={selectedEntityToAdd}
                     onSelectEntity={(id) => setSelectedEntityToAdd(id)}
                     placeholder="Cari entitas..."
@@ -1401,15 +1403,17 @@ export function EventsClient({ projectId, projectName, user }: EventsClientProps
                   /* MODE A: BUAT RELASI BARU WITH SEARCHABLE PICKERS */
                   <div className="flex flex-col gap-2 mb-2">
                     <div className="flex flex-col sm:flex-row gap-2">
-                      <SearchableEntityPicker
+                      <SmartEntityPickerWithFilters
                         entities={allEntities}
+                        entityTypes={entityTypes}
                         selectedEntityId={newRelSourceId}
                         onSelectEntity={(id) => setNewRelSourceId(id)}
                         placeholder="Cari Entitas A (Source)..."
                         onOpenQuickCreate={() => setIsQuickCreateEntityOpen(true)}
                       />
-                      <SearchableEntityPicker
+                      <SmartEntityPickerWithFilters
                         entities={allEntities}
+                        entityTypes={entityTypes}
                         selectedEntityId={newRelTargetId}
                         onSelectEntity={(id) => setNewRelTargetId(id)}
                         placeholder="Cari Entitas B (Target)..."
@@ -1518,8 +1522,9 @@ export function EventsClient({ projectId, projectName, user }: EventsClientProps
                 </label>
 
                 <div className="flex flex-col sm:flex-row gap-2 mb-2">
-                  <SearchableEntityPicker
+                  <SmartEntityPickerWithFilters
                     entities={allEntities}
+                    entityTypes={entityTypes}
                     selectedEntityId={selectedStatusEntityId}
                     onSelectEntity={(id) => setSelectedStatusEntityId(id)}
                     placeholder="Cari Karakter/Entitas..."
