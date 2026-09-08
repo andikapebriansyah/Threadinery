@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Plus, X, ChevronDown, ChevronUp, Image as ImageIcon, Sparkles, Heart, ShieldAlert, KeyRound, Edit3 } from "lucide-react";
+import React, { useState, useEffect, useMemo } from "react";
+import { Plus, X, ChevronDown, ChevronUp, Image as ImageIcon, Sparkles, Heart, ShieldAlert, KeyRound, Edit3, MapPin } from "lucide-react";
+import { SmartEntityPickerWithFilters } from "./SmartEntityPickerWithFilters";
 
 interface EntityTypeItem {
   id: string;
@@ -32,10 +33,9 @@ interface EditEntityModalProps {
 }
 
 const DEFAULT_STATUS_OPTIONS = [
-  "Aktif / Hidup",
-  "Meninggal / Almarhum",
-  "Hilang / Tidak Diketahui",
-  "Rusak / Hancur",
+  { value: "Alive", label: "💚 Hidup / Aktif (Alive)" },
+  { value: "Deceased", label: "💀 Meninggal / Hancur (Deceased)" },
+  { value: "Unknown", label: "❓ Tidak Diketahui / Hilang (Unknown)" },
 ];
 
 export function EditEntityModal({
@@ -64,9 +64,84 @@ export function EditEntityModal({
   // Type-specific & Custom Metadata
   const [details, setDetails] = useState<Record<string, string>>({});
   const [customProps, setCustomProps] = useState<Array<{ id: string; key: string; value: string }>>([]);
+  const [existingEntities, setExistingEntities] = useState<any[]>([]);
+  const [domicileLocationId, setDomicileLocationId] = useState<string>("");
+  const [initialDomicileRelId, setInitialDomicileRelId] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const BUILTIN_KEYS = useMemo(() => [
+    "Ras",
+    "Usia",
+    "Pekerjaan",
+    "Penampilan Fisik",
+    "Kesukaan",
+    "Ketakutan",
+    "Rahasia Kelam",
+    "Kepribadian",
+    "Motivasi",
+    "Lokasi Induk",
+    "Iklim",
+    "Penguasa",
+    "Pemimpin",
+    "Didirikan",
+    "Ideologi",
+    "Pemilik Saat Ini",
+    "Pencipta",
+    "Kekuatan",
+    "Aturan Utama",
+    "Pengguna",
+  ], []);
+
+  useEffect(() => {
+    if (isOpen && projectId) {
+      fetch(`/api/projects/${projectId}/entities`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data)) setExistingEntities(data);
+        })
+        .catch((err) => console.warn("Fetch existing entities error:", err));
+
+      // Fetch existing domicile relationship
+      if (entity?.id) {
+        fetch(`/api/projects/${projectId}/relationships`)
+          .then((res) => res.json())
+          .then((data) => {
+            if (Array.isArray(data)) {
+              const domRel = data.find(
+                (r: any) =>
+                  r.sourceEntityId === entity.id &&
+                  (r.target?.type?.name?.toLowerCase() === "location" ||
+                    r.label?.toLowerCase().includes("tinggal") ||
+                    r.label?.toLowerCase().includes("berada") ||
+                    r.label?.toLowerCase().includes("markas"))
+              );
+              if (domRel) {
+                setDomicileLocationId(domRel.targetEntityId);
+                setInitialDomicileRelId(domRel.id);
+              }
+            }
+          })
+          .catch((err) => console.warn("Fetch domicile rel error:", err));
+      }
+    }
+  }, [isOpen, projectId, entity?.id]);
+
+  // World attribute suggestions for current selected type
+  const suggestedAttributeKeys = useMemo(() => {
+    const keysSet = new Set<string>();
+    existingEntities.forEach((ent) => {
+      if (ent.typeId === selectedTypeId && ent.metadata) {
+        Object.keys(ent.metadata).forEach((k) => {
+          if (!BUILTIN_KEYS.includes(k)) {
+            keysSet.add(k);
+          }
+        });
+      }
+    });
+    return Array.from(keysSet);
+  }, [existingEntities, selectedTypeId, BUILTIN_KEYS]);
 
   useEffect(() => {
     if (entity) {
@@ -81,45 +156,24 @@ export function EditEntityModal({
       const newDetails: Record<string, string> = {};
       const newCustomProps: Array<{ id: string; key: string; value: string }> = [];
 
-      const KNOWN_KEYS = [
-        "Usia",
-        "Pekerjaan",
-        "Penampilan Fisik",
-        "Kesukaan",
-        "Ketakutan",
-        "Rahasia Kelam",
-        "Kepribadian",
-        "Motivasi",
-        "Kelemahan",
-        "Lokasi Induk",
-        "Iklim",
-        "Penguasa",
-        "Pemimpin",
-        "Didirikan",
-        "Ideologi",
-        "Pemilik Saat Ini",
-        "Pencipta",
-        "Kekuatan",
-        "Aturan Utama",
-        "Pengguna",
-      ];
-
       Object.entries(meta).forEach(([k, v]) => {
-        if (KNOWN_KEYS.includes(k)) {
-          newDetails[k] = String(v);
-        } else {
-          newCustomProps.push({
-            id: `prop-${Math.random()}`,
-            key: k,
-            value: String(v),
-          });
+        if (v !== null && v !== undefined && String(v).trim()) {
+          if (BUILTIN_KEYS.includes(k)) {
+            newDetails[k] = String(v);
+          } else {
+            newCustomProps.push({
+              id: `prop-${Math.random()}`,
+              key: k,
+              value: String(v),
+            });
+          }
         }
       });
 
       setDetails(newDetails);
       setCustomProps(newCustomProps);
     }
-  }, [entity]);
+  }, [entity, BUILTIN_KEYS]);
 
   if (!isOpen) return null;
 
@@ -174,10 +228,12 @@ export function EditEntityModal({
     setLoading(true);
 
     try {
-      const combinedMetadata: Record<string, any> = {};
+      const combinedMetadata: Record<string, any> = {
+        ...(entity.metadata || {}),
+      };
 
       Object.entries(details).forEach(([k, v]) => {
-        if (v.trim()) combinedMetadata[k] = v.trim();
+        if (v && v.trim()) combinedMetadata[k] = v.trim();
       });
 
       customProps.forEach((p) => {
@@ -202,10 +258,43 @@ export function EditEntityModal({
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "Gagal memperbarui entitas");
+        throw new Error(data.error || "Gagal memperbarui entity");
       }
 
       const updatedEntity = await res.json();
+
+      // Sync Domicile Location Relationship
+      if (domicileLocationId !== (initialDomicileRelId ? domicileLocationId : "")) {
+        try {
+          if (initialDomicileRelId && !domicileLocationId) {
+            // Deleted domicile
+            await fetch(`/api/projects/${projectId}/relationships/${initialDomicileRelId}`, {
+              method: "DELETE",
+            });
+          } else if (domicileLocationId) {
+            if (initialDomicileRelId) {
+              await fetch(`/api/projects/${projectId}/relationships/${initialDomicileRelId}`, {
+                method: "DELETE",
+              });
+            }
+            await fetch(`/api/projects/${projectId}/relationships`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                sourceEntityId: entity.id,
+                targetEntityId: domicileLocationId,
+                label:
+                  typeNameLower.includes("organisasi") || typeNameLower.includes("organization")
+                    ? "Markas"
+                    : "Tinggal di sini",
+              }),
+            });
+          }
+        } catch (syncErr) {
+          console.warn("Domicile sync error:", syncErr);
+        }
+      }
+
       onSuccess(updatedEntity);
       onClose();
     } catch (err: any) {
@@ -283,21 +372,21 @@ export function EditEntityModal({
               </select>
             </div>
 
+            {/* STATUS UTAMA (MANDATORY DROPDOWN) */}
             <div className="form-group">
-              <label>Status (Opsional)</label>
-              <input
-                type="text"
-                className="form-input text-xs"
-                placeholder="Aktif, Meninggal, Hilang..."
-                value={status}
+              <label className="font-bold text-[var(--accent)]">Status Keberadaan Utama *</label>
+              <select
+                className="form-input text-xs font-semibold"
+                value={status || "Alive"}
                 onChange={(e) => setStatus(e.target.value)}
-                list="edit-status-options"
-              />
-              <datalist id="edit-status-options">
+                required
+              >
                 {DEFAULT_STATUS_OPTIONS.map((opt) => (
-                  <option key={opt} value={opt} />
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
                 ))}
-              </datalist>
+              </select>
             </div>
           </div>
 
@@ -379,6 +468,33 @@ export function EditEntityModal({
                 <div className="p-4 mt-2 rounded-xl bg-[var(--bg)] border border-[var(--border)] flex flex-col gap-3.5 text-xs">
                   {typeNameLower.includes("character") && (
                     <>
+                      {/* DOMICILE LOCATION FIELD */}
+                      <div className="form-group mb-3">
+                        <label className="text-xs font-semibold text-[var(--text-secondary)] mb-1 flex items-center gap-1.5">
+                          <MapPin size={13} className="text-[var(--accent)]" />
+                          <span>Lokasi Saat Ini / Domisili (Opsional)</span>
+                        </label>
+                        <SmartEntityPickerWithFilters
+                          entities={existingEntities}
+                          entityTypes={entityTypes}
+                          typeRestriction="Location"
+                          selectedEntityId={domicileLocationId}
+                          onSelectEntity={(id) => setDomicileLocationId(id)}
+                          placeholder="Pilih kota / wilayah tempat tinggal..."
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label>Ras / Spesies</label>
+                        <input
+                          type="text"
+                          className="form-input text-xs"
+                          placeholder="Misal: Manusia, Elf, Vampir..."
+                          value={details["Ras"] || ""}
+                          onChange={(e) => updateDetail("Ras", e.target.value)}
+                        />
+                      </div>
+
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="form-group">
                           <label>Usia</label>
@@ -617,7 +733,7 @@ export function EditEntityModal({
               <button
                 type="button"
                 className="w-full flex items-center justify-between p-3.5 rounded-xl bg-[var(--bg)] border border-[var(--border)] text-xs font-semibold text-[var(--text)] hover:border-[var(--accent)] transition-colors"
-                onClick={handleAddCustomProp}
+                onClick={() => setShowCustomProps(!showCustomProps)}
               >
                 <span className="flex items-center gap-2">
                   <Plus size={14} className="text-[var(--accent)]" />
@@ -626,8 +742,43 @@ export function EditEntityModal({
                 {showCustomProps ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </button>
 
-              {showCustomProps && customProps.length > 0 && (
+              {showCustomProps && (
                 <div className="p-4 mt-2 rounded-xl bg-[var(--bg)] border border-[var(--border)] flex flex-col gap-3">
+                  {/* Suggested World Attributes Template Chips */}
+                  {suggestedAttributeKeys.length > 0 && (
+                    <div className="flex flex-col gap-1.5 p-2.5 rounded-xl bg-[var(--surface)] border border-[var(--border)]">
+                      <span className="text-[10.5px] font-bold text-[var(--accent)] flex items-center gap-1">
+                        <Sparkles size={12} /> Sugesti Atribut Lain yang Ada di Dunia Ini:
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {suggestedAttributeKeys.map((sKey: string) => {
+                          const isAdded = customProps.some((p) => p.key === sKey);
+                          return (
+                            <button
+                              key={sKey}
+                              type="button"
+                              className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all cursor-pointer ${
+                                isAdded
+                                  ? "bg-[var(--accent-soft)] text-[var(--accent)] border-[var(--accent)] font-bold"
+                                  : "bg-[var(--bg)] text-[var(--text)] border-[var(--border)] hover:border-[var(--accent)]"
+                              }`}
+                              onClick={() => {
+                                if (!isAdded) {
+                                  setCustomProps((prev) => [
+                                    ...prev,
+                                    { id: `prop-${Date.now()}-${Math.random()}`, key: sKey, value: "" },
+                                  ]);
+                                }
+                              }}
+                            >
+                              + {sKey}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {customProps.map((prop) => (
                     <div key={prop.id} className="flex items-center gap-2 w-full">
                       <div className="flex-1">
@@ -658,6 +809,16 @@ export function EditEntityModal({
                       </button>
                     </div>
                   ))}
+
+                  {/* Tombol Tambah Baris Atribut Custom Baru */}
+                  <button
+                    type="button"
+                    className="btn btn-secondary text-xs py-2 px-3 flex items-center justify-center gap-1.5 w-full mt-1 border-dashed"
+                    onClick={handleAddCustomProp}
+                  >
+                    <Plus size={13} />
+                    <span>Tambah Baris Atribut Baru</span>
+                  </button>
                 </div>
               )}
             </div>

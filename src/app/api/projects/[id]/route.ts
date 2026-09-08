@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
 
 // GET /api/projects/[id]
 export async function GET(
@@ -34,9 +35,20 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: projectId } = await params;
+  const session = await auth();
 
   try {
-    const { name, description, genre, subGenre } = await req.json();
+    if (session?.user?.id) {
+      const existing = await prisma.project.findUnique({
+        where: { id: projectId },
+        select: { userId: true },
+      });
+      if (existing && existing.userId && existing.userId !== session.user.id) {
+        return NextResponse.json({ error: "Anda tidak memiliki hak akses ke project ini" }, { status: 403 });
+      }
+    }
+
+    const { name, description, genre, subGenre, calendarType } = await req.json();
 
     if (!name?.trim()) {
       return NextResponse.json({ error: "Nama dunia wajib diisi" }, { status: 400 });
@@ -46,6 +58,7 @@ export async function PUT(
     const cleanDesc = description !== undefined ? (description ? description.trim() : null) : null;
     const cleanGenre = genre !== undefined ? (genre ? genre.trim() : null) : null;
     const cleanSubGenre = subGenre !== undefined ? (subGenre ? subGenre.trim() : null) : null;
+    const cleanCalendarType = calendarType !== undefined ? (calendarType ? calendarType.trim() : "fantasy") : "fantasy";
 
     let updated = null;
 
@@ -57,6 +70,7 @@ export async function PUT(
           description: cleanDesc,
           genre: cleanGenre,
           subGenre: cleanSubGenre,
+          calendarType: cleanCalendarType,
         } as any,
         include: {
           books: { orderBy: { orderIndex: "asc" } },
@@ -65,13 +79,13 @@ export async function PUT(
       });
     } catch (prismaErr: any) {
       console.warn("Prisma update fallback to executeRaw:", prismaErr?.message);
-      // Raw SQL fallback for in-memory cached Prisma client instances
       await prisma.$executeRaw`
         UPDATE "Project"
         SET "name" = ${cleanName},
             "description" = ${cleanDesc},
             "genre" = ${cleanGenre},
             "subGenre" = ${cleanSubGenre},
+            "calendarType" = ${cleanCalendarType},
             "updatedAt" = NOW()
         WHERE "id" = ${projectId}
       `;
@@ -98,8 +112,19 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: projectId } = await params;
+  const session = await auth();
 
   try {
+    if (session?.user?.id) {
+      const existing = await prisma.project.findUnique({
+        where: { id: projectId },
+        select: { userId: true },
+      });
+      if (existing && existing.userId && existing.userId !== session.user.id) {
+        return NextResponse.json({ error: "Anda tidak memiliki hak akses ke project ini" }, { status: 403 });
+      }
+    }
+
     await prisma.project.delete({
       where: { id: projectId },
     });

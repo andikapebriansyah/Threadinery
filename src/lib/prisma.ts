@@ -23,8 +23,8 @@ function createPrismaClient() {
   });
 }
 
-// Reset global cached instance on dev module re-evaluation to load generated schema changes
-export const prisma = createPrismaClient();
+// Reuse cached instance in development to avoid leaking database connections
+export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;

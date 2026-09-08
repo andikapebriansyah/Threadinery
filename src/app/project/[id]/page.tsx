@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { ProjectDashboardClient } from "@/components/ProjectDashboardClient";
@@ -10,7 +11,10 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  const userId = session?.user?.id || "dev-user-id";
+  if (!session?.user) {
+    redirect("/");
+  }
+  const userId = session.user.id || "dev-user-id";
   const { id } = await params;
 
   let project = null;

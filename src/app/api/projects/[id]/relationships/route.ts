@@ -14,6 +14,13 @@ export async function GET(
       include: {
         source: { include: { type: true } },
         target: { include: { type: true } },
+        eventChanges: {
+          include: {
+            event: {
+              select: { id: true, name: true, orderInChapter: true, orderIndex: true, createdAt: true },
+            },
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
     });

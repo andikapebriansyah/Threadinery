@@ -20,9 +20,11 @@ export async function POST(
     // Execute bulk update using prisma transaction
     await prisma.$transaction(
       orderedEventIds.map((eventId: string, index: number) =>
-        prisma.event.updateMany({
-          where: { id: eventId, projectId },
-          data: { orderInChapter: index + 1 },
+        prisma.event.update({
+          where: { id: eventId },
+          data: {
+            orderInChapter: index + 1,
+          },
         })
       )
     );
@@ -31,7 +33,7 @@ export async function POST(
   } catch (error: any) {
     console.error("POST /api/projects/[id]/events/reorder error:", error);
     return NextResponse.json(
-      { error: "Gagal merubah urutan event" },
+      { error: error?.message || "Gagal merubah urutan event" },
       { status: 500 }
     );
   }

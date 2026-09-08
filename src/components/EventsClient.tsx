@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { ThreadinaryLogo } from "./ThreadinaryLogo";
+import { ProjectNavbar } from "./ProjectNavbar";
 import { SmartEntityPickerWithFilters } from "./SmartEntityPickerWithFilters";
 import {
   ArrowLeft,
@@ -25,6 +26,8 @@ import {
   Sparkles,
   UserPlus,
   Link2,
+  Shield,
+  FileText,
 } from "lucide-react";
 
 interface BookSimple {
@@ -83,6 +86,8 @@ interface EventItem {
   id: string;
   projectId: string;
   bookId?: string | null;
+  chapterId?: string | null;
+  chapter?: { id: string; title: string; orderIndex?: number } | null;
   name: string;
   description?: string | null;
   worldDate?: string | null;
@@ -240,6 +245,174 @@ function SearchableEntityPicker({
   );
 }
 
+function AdaptiveWorldDateInput({
+  calendarType,
+  worldDate,
+  onChange,
+  knownEras,
+}: {
+  calendarType: "fantasy" | "real" | "custom";
+  worldDate: string;
+  onChange: (val: string) => void;
+  knownEras: string[];
+}) {
+  const [overrideFreeText, setOverrideFreeText] = useState(false);
+
+  // Parse existing year
+  const parsedYear = useMemo(() => {
+    const m = worldDate.match(/Tahun\s+(\d+)/i);
+    return m ? m[1] : "";
+  }, [worldDate]);
+
+  // Parse existing era
+  const parsedEra = useMemo(() => {
+    const m = worldDate.match(/(?:Era|Zaman)\s+[^,\)\)]+/i);
+    if (m) return m[0].trim();
+    const parts = worldDate.split(",");
+    return parts.length > 1 ? parts[1].trim() : "";
+  }, [worldDate]);
+
+  const [inputYear, setInputYear] = useState(parsedYear);
+  const [selectedEra, setSelectedEra] = useState(parsedEra || knownEras[0] || "Era Pertama");
+  const [customEra, setCustomEra] = useState("");
+
+  useEffect(() => {
+    const y = worldDate.match(/Tahun\s+(\d+)/i)?.[1] || "";
+    setInputYear(y);
+
+    const eraM = worldDate.match(/(?:Era|Zaman)\s+[^,\)\)]+/i)?.[0]?.trim();
+    if (eraM) {
+      setSelectedEra(eraM);
+      setCustomEra("");
+    } else if (knownEras.length > 0 && !selectedEra) {
+      setSelectedEra(knownEras[0]);
+    }
+  }, [worldDate, knownEras]);
+
+  const updateFantasyDate = (yStr: string, eraStr: string, customEraStr: string) => {
+    const activeEra = eraStr === "NEW_CUSTOM" ? customEraStr.trim() : eraStr;
+    let finalVal = "";
+    if (yStr.trim()) {
+      finalVal = activeEra ? `Tahun ${yStr.trim()}, ${activeEra}` : `Tahun ${yStr.trim()}`;
+    } else {
+      finalVal = activeEra || "";
+    }
+    onChange(finalVal);
+  };
+
+  if (calendarType === "fantasy" && !overrideFreeText) {
+    return (
+      <div className="flex flex-col gap-2.5 bg-[var(--surface)] p-3 rounded-xl border border-[var(--border)] col-span-full">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-bold text-[var(--accent)] flex items-center gap-1">
+            <Shield size={12} /> Format Penanggalan Dunia (Era Fantasi)
+          </span>
+          <button
+            type="button"
+            className="text-[10px] text-[var(--text-secondary)] hover:text-[var(--accent)] underline cursor-pointer"
+            onClick={() => setOverrideFreeText(true)}
+          >
+            Teks Bebas Custom
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div>
+            <label className="text-[10px] text-[var(--text-secondary)] font-semibold mb-0.5 block">
+              Pilih Era Dunia *
+            </label>
+            <select
+              className="form-input text-xs"
+              value={selectedEra}
+              onChange={(e) => {
+                const newEra = e.target.value;
+                setSelectedEra(newEra);
+                updateFantasyDate(inputYear, newEra, customEra);
+              }}
+            >
+              {knownEras.map((era) => (
+                <option key={era} value={era}>
+                  {era}
+                </option>
+              ))}
+              <option value="NEW_CUSTOM">+ Buat Era Kustom Baru...</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-[10px] text-[var(--text-secondary)] font-semibold mb-0.5 block">
+              Angka Tahun *
+            </label>
+            <input
+              type="number"
+              className="form-input text-xs"
+              placeholder="Misal: 1420"
+              value={inputYear}
+              onChange={(e) => {
+                const newY = e.target.value;
+                setInputYear(newY);
+                updateFantasyDate(newY, selectedEra, customEra);
+              }}
+            />
+          </div>
+        </div>
+
+        {selectedEra === "NEW_CUSTOM" && (
+          <div className="mt-1">
+            <label className="text-[10px] text-[var(--accent)] font-semibold mb-0.5 block">
+              Nama Era Kustom Baru *
+            </label>
+            <input
+              type="text"
+              className="form-input text-xs"
+              placeholder='Misal: "Era Kegelapan", "Zaman Solaria"...'
+              value={customEra}
+              onChange={(e) => {
+                const newC = e.target.value;
+                setCustomEra(newC);
+                updateFantasyDate(inputYear, selectedEra, newC);
+              }}
+              autoFocus
+            />
+          </div>
+        )}
+
+        <div className="text-[10.5px] text-[var(--text-secondary)] font-serif bg-[var(--bg)] px-2.5 py-1.5 rounded-lg border border-[var(--border)]">
+          ⚡ Hasil Penanggalan: <strong className="text-[var(--accent)]">{worldDate || "(Belum diisi)"}</strong>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <label className="text-xs">Tanggal / Era Dunia (Opsional)</label>
+        {calendarType === "fantasy" && (
+          <button
+            type="button"
+            className="text-[10px] text-[var(--accent)] font-semibold hover:underline cursor-pointer"
+            onClick={() => setOverrideFreeText(false)}
+          >
+            ← Kembali ke Form Era Fantasi
+          </button>
+        )}
+      </div>
+      <input
+        type="text"
+        className="form-input text-xs"
+        placeholder={
+          calendarType === "real"
+            ? 'Misal: "15 Agustus 1945", "2024-05-10"...'
+            : 'Misal: "Musim Gugur Era 3", "Tahun 1420"...'
+        }
+        value={worldDate}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </div>
+  );
+}
+
 export function EventsClient({ projectId, projectName, user }: EventsClientProps) {
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -248,6 +421,31 @@ export function EventsClient({ projectId, projectName, user }: EventsClientProps
   const [entityTypes, setEntityTypes] = useState<EntityTypeItem[]>([]);
   const [allRelationships, setAllRelationships] = useState<RelationshipSimple[]>([]);
   const [loading, setLoading] = useState(true);
+  const [calendarType, setCalendarType] = useState<"fantasy" | "real" | "custom">("fantasy");
+
+  // Derived known eras from events
+  const knownEras = useMemo(() => {
+    const eraSet = new Set<string>();
+    events.forEach((evt) => {
+      if (evt.worldDate) {
+        const eraMatch = evt.worldDate.match(/(?:Era|Zaman)\s+[^,\)\)]+/i);
+        if (eraMatch) {
+          eraSet.add(eraMatch[0].trim());
+        } else {
+          const parts = evt.worldDate.split(",");
+          if (parts.length > 1) eraSet.add(parts[1].trim());
+        }
+      }
+    });
+
+    if (eraSet.size === 0) {
+      eraSet.add("Era Pertama");
+      eraSet.add("Era Kedua");
+      eraSet.add("Era Ketiga");
+    }
+
+    return Array.from(eraSet);
+  }, [events]);
 
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState("");
@@ -255,6 +453,10 @@ export function EventsClient({ projectId, projectName, user }: EventsClientProps
 
   // Event Detail Modal State
   const [selectedDetailEvent, setSelectedDetailEvent] = useState<EventItem | null>(null);
+
+  // Drag and Drop Reorder State
+  const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
   // Modal Create / Edit State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -323,27 +525,50 @@ export function EventsClient({ projectId, projectName, user }: EventsClientProps
     setTheme(isDark ? "dark" : "light");
 
     fetchInitialData();
+
+    const handleBookChange = (e: any) => {
+      if (e.detail?.bookId) {
+        setSelectedBookFilter(e.detail.bookId);
+      }
+    };
+    window.addEventListener("threadinery:book_change", handleBookChange);
+
+    return () => {
+      window.removeEventListener("threadinery:book_change", handleBookChange);
+    };
   }, [projectId]);
 
   const fetchInitialData = async () => {
     try {
       setLoading(true);
-      const [eventsRes, booksRes, entitiesRes, typesRes, relsRes] = await Promise.all([
+      const [eventsRes, booksRes, entitiesRes, typesRes, relsRes, projRes] = await Promise.all([
         fetch(`/api/projects/${projectId}/events`),
         fetch(`/api/projects/${projectId}/books`),
         fetch(`/api/projects/${projectId}/entities`),
         fetch(`/api/projects/${projectId}/entity-types`),
         fetch(`/api/projects/${projectId}/relationships`),
+        fetch(`/api/projects/${projectId}`),
       ]);
 
-      if (eventsRes.ok) {
-        const eventsData = await eventsRes.json();
-        if (Array.isArray(eventsData)) setEvents(eventsData);
+      if (projRes.ok) {
+        const pData = await projRes.json();
+        if (pData.calendarType) setCalendarType(pData.calendarType);
       }
 
       if (booksRes.ok) {
         const booksData = await booksRes.json();
-        if (Array.isArray(booksData)) setBooks(booksData);
+        if (Array.isArray(booksData) && booksData.length > 0) {
+          setBooks(booksData);
+          const savedBookId = localStorage.getItem(`threadinery_active_book_${projectId}`);
+          const validSaved = booksData.find((b: any) => b.id === savedBookId);
+          const activeId = validSaved ? validSaved.id : booksData[0].id;
+          setSelectedBookFilter(activeId);
+        }
+      }
+
+      if (eventsRes.ok) {
+        const eventsData = await eventsRes.json();
+        if (Array.isArray(eventsData)) setEvents(eventsData);
       }
 
       if (entitiesRes.ok) {
@@ -382,7 +607,13 @@ export function EventsClient({ projectId, projectName, user }: EventsClientProps
     setFormName("");
     setFormDescription("");
     setFormWorldDate("");
-    setFormBookId(books.length > 0 ? books[0].id : "");
+    setFormBookId(
+      selectedBookFilter && selectedBookFilter !== "ALL"
+        ? selectedBookFilter
+        : books.length > 0
+        ? books[0].id
+        : ""
+    );
     setFormWritingStatus("planned");
 
     setFormInvolvedEntities([]);
@@ -551,7 +782,7 @@ export function EventsClient({ projectId, projectName, user }: EventsClientProps
         targetEntityId: newRelTargetId,
         sourceName: srcObj?.name || "Entitas A",
         targetName: tgtObj?.name || "Entitas B",
-        beforeLabel: null,
+        beforeLabel: undefined,
         afterLabel: newRelLabelInput.trim(),
       },
     ]);
@@ -577,7 +808,7 @@ export function EventsClient({ projectId, projectName, user }: EventsClientProps
         relationshipId: selectedExistingRelId,
         sourceName: relObj?.source?.name || "Source",
         targetName: relObj?.target?.name || "Target",
-        beforeLabel: relBeforeInput.trim() || relObj?.label || null,
+        beforeLabel: relBeforeInput.trim() || relObj?.label || undefined,
         afterLabel: relAfterInput.trim(),
       },
     ]);
@@ -660,24 +891,93 @@ export function EventsClient({ projectId, projectName, user }: EventsClientProps
   // Reorder Event Up/Down
   const handleReorderEvent = async (index: number, direction: "up" | "down") => {
     const targetIndex = direction === "up" ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= events.length) return;
+    if (targetIndex < 0 || targetIndex >= filteredEvents.length) return;
+
+    const currentItem = filteredEvents[index];
+    const targetItem = filteredEvents[targetIndex];
+    if (!currentItem || !targetItem) return;
+
+    const realFromIdx = events.findIndex((e) => e.id === currentItem.id);
+    const realToIdx = events.findIndex((e) => e.id === targetItem.id);
+    if (realFromIdx < 0 || realToIdx < 0) return;
 
     const newEvents = [...events];
-    const temp = newEvents[index];
-    newEvents[index] = newEvents[targetIndex];
-    newEvents[targetIndex] = temp;
+    const temp = newEvents[realFromIdx];
+    newEvents[realFromIdx] = newEvents[realToIdx];
+    newEvents[realToIdx] = temp;
 
-    setEvents(newEvents);
+    const updatedEvents = newEvents.map((evt, idx) => ({
+      ...evt,
+      orderInChapter: idx + 1,
+    }));
+
+    setEvents(updatedEvents);
 
     try {
-      const orderedIds = newEvents.map((e) => e.id);
-      await fetch(`/api/projects/${projectId}/events/reorder`, {
+      const orderedIds = updatedEvents.map((e) => e.id);
+      const res = await fetch(`/api/projects/${projectId}/events/reorder`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orderedEventIds: orderedIds }),
       });
+      if (!res.ok) {
+        fetchInitialData();
+      }
     } catch (err) {
       console.error("Reorder events error:", err);
+      fetchInitialData();
+    }
+  };
+
+  // Drag and Drop Handler
+  const handleDrop = async (fromIdx: number | null, toIdx: number) => {
+    if (
+      fromIdx === null ||
+      fromIdx === toIdx ||
+      fromIdx < 0 ||
+      fromIdx >= filteredEvents.length ||
+      toIdx < 0 ||
+      toIdx >= filteredEvents.length
+    ) {
+      setDraggedIdx(null);
+      setDragOverIdx(null);
+      return;
+    }
+
+    const draggedItem = filteredEvents[fromIdx];
+    const targetItem = filteredEvents[toIdx];
+    if (!draggedItem || !targetItem) return;
+
+    const realFromIdx = events.findIndex((e) => e.id === draggedItem.id);
+    const realToIdx = events.findIndex((e) => e.id === targetItem.id);
+    if (realFromIdx < 0 || realToIdx < 0) return;
+
+    const newEvents = [...events];
+    const [removed] = newEvents.splice(realFromIdx, 1);
+    newEvents.splice(realToIdx, 0, removed);
+
+    const updatedEvents = newEvents.map((evt, idx) => ({
+      ...evt,
+      orderInChapter: idx + 1,
+    }));
+
+    setEvents(updatedEvents);
+    setDraggedIdx(null);
+    setDragOverIdx(null);
+
+    try {
+      const orderedIds = updatedEvents.map((e) => e.id);
+      const res = await fetch(`/api/projects/${projectId}/events/reorder`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderedEventIds: orderedIds }),
+      });
+      if (!res.ok) {
+        fetchInitialData();
+      }
+    } catch (err) {
+      console.error("Reorder events drag error:", err);
+      fetchInitialData();
     }
   };
 
@@ -707,12 +1007,15 @@ export function EventsClient({ projectId, projectName, user }: EventsClientProps
         (evt.description &&
           evt.description.toLowerCase().includes(searchQuery.toLowerCase()));
 
+      const isPrimary = books.length > 0 && selectedBookFilter === books[0].id;
       const matchesBook =
-        selectedBookFilter === "ALL" || evt.bookId === selectedBookFilter;
+        selectedBookFilter === "ALL" ||
+        evt.bookId === selectedBookFilter ||
+        (!evt.bookId && isPrimary);
 
       return matchesSearch && matchesBook;
     });
-  }, [events, searchQuery, selectedBookFilter]);
+  }, [events, searchQuery, selectedBookFilter, books]);
 
   const initials = user.name
     ? user.name
@@ -725,88 +1028,35 @@ export function EventsClient({ projectId, projectName, user }: EventsClientProps
 
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] transition-colors duration-300">
-      {/* Topbar Navigation */}
-      <header className="topbar">
-        <div className="topbar-inner flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <Link
-              href={`/project/${projectId}`}
-              className="inline-flex items-center gap-1.5 text-sm text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors"
-            >
-              <ArrowLeft size={16} />
-              <span>Project Dashboard</span>
-            </Link>
-            <div className="w-px h-5 bg-[var(--border)]" />
-            <ThreadinaryLogo size="sm" href="/dashboard" />
-          </div>
+      {/* Unified Project Navbar */}
+      <ProjectNavbar projectId={projectId} projectName={projectName} user={user} />
 
-          <div className="topbar-right flex items-center gap-3">
-            <button
-              className="btn btn-primary text-xs px-4 py-2 flex items-center gap-1.5"
-              onClick={handleOpenCreateModal}
-            >
-              <Plus size={15} />
-              <span>Tambah Event Baru</span>
-            </button>
-
-            <button
-              className="theme-toggle"
-              aria-label="Ganti tema"
-              onClick={toggleTheme}
-            >
-              {theme === "dark" ? (
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  className="w-4 h-4"
-                >
-                  <circle cx="12" cy="12" r="4" />
-                  <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
-                </svg>
-              ) : (
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  className="w-4 h-4"
-                >
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />
-                </svg>
-              )}
-            </button>
-
-            <div className="avatar" title={user.name || "User"}>
-              {initials}
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Full-Width Container */}
-      <main className="wrap py-8">
-        {/* Header Controls Bar */}
-        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-6 shadow-sm mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <main className="wrap pb-16" style={{ paddingTop: "24px" }}>
+        {/* Top Control Bar with Full Flex Wrap Alignment */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div>
-            <h1 className="font-serif text-2xl md:text-3xl font-semibold text-[var(--text)] flex items-center gap-2.5 mb-1">
-              <Calendar size={26} className="text-[var(--accent)]" />
-              <span>Events & Alur Kejadian Dunia</span>
-            </h1>
+            <div className="flex items-center gap-2 mb-1">
+              <Calendar size={20} className="text-[var(--accent)]" />
+              <h1 className="font-serif text-2xl font-semibold text-[var(--text)]">
+                Peristiwa & Alur Cerita
+              </h1>
+            </div>
             <p className="text-xs text-[var(--text-secondary)]">
-              Urutan kronologi kejadian cerita Anda ({events.length} event tercatat). Klik event mana saja untuk membuka rincian penuhnya.
+              Urutan kronologi kejadian dunia atau bab cerita. Geser kartu untuk mengatur urutan kejadian.
             </p>
           </div>
 
-          {/* Search & Book Filter */}
           <div className="flex items-center gap-3 flex-wrap">
-            <div className="search max-w-xs py-1.5 px-3">
-              <Search size={14} className="text-[var(--text-secondary)]" />
+            {/* Search Input with Clear Icon */}
+            <div className="relative">
+              <Search
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]"
+              />
               <input
                 type="text"
                 placeholder="Cari event..."
-                className="text-xs"
+                className="bg-[var(--bg)] border border-[var(--border)] text-[var(--text)] text-xs rounded-xl pl-8 pr-3 py-2 outline-none focus:border-[var(--accent)] transition-colors w-44 md:w-56"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -817,7 +1067,14 @@ export function EventsClient({ projectId, projectName, user }: EventsClientProps
                 <select
                   className="bg-[var(--bg)] border border-[var(--border)] text-[var(--text)] text-xs font-semibold rounded-xl px-3 py-2 cursor-pointer outline-none hover:border-[var(--accent)] transition-colors"
                   value={selectedBookFilter}
-                  onChange={(e) => setSelectedBookFilter(e.target.value)}
+                  onChange={(e) => {
+                    const bId = e.target.value;
+                    setSelectedBookFilter(bId);
+                    localStorage.setItem(`threadinery_active_book_${projectId}`, bId);
+                    window.dispatchEvent(
+                      new CustomEvent("threadinery:book_change", { detail: { bookId: bId } })
+                    );
+                  }}
                 >
                   <option value="ALL">Semua Buku ({events.length})</option>
                   {books.map((b) => (
@@ -866,14 +1123,42 @@ export function EventsClient({ projectId, projectName, user }: EventsClientProps
               {filteredEvents.map((evt, idx) => (
                 <div
                   key={evt.id}
-                  className="relative z-10 bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--accent)] rounded-2xl p-4 md:p-5 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer flex items-center gap-3 md:gap-4"
+                  className={`relative z-10 bg-[var(--surface)] border rounded-2xl p-4 md:p-5 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer flex items-center gap-3 md:gap-4 ${
+                    draggedIdx === idx
+                      ? "opacity-40 border-dashed border-[var(--accent)] scale-95"
+                      : dragOverIdx === idx
+                      ? "border-2 border-[var(--accent)] bg-[var(--accent-soft)] shadow-md"
+                      : "border-[var(--border)] hover:border-[var(--accent)]"
+                  }`}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.dataTransfer.dropEffect = "move";
+                    if (dragOverIdx !== idx) setDragOverIdx(idx);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleDrop(draggedIdx, idx);
+                  }}
                   onClick={() => setSelectedDetailEvent(evt)}
                 >
                   {/* Left Grip Handle 6-Dots & Sequential Step Marker */}
                   <div className="flex items-center gap-2 shrink-0">
                     <div
-                      className="flex flex-col gap-1 items-center justify-center p-1 text-[var(--text-secondary)] hover:text-[var(--accent)] cursor-grab active:cursor-grabbing"
-                      title="Grip Handle (Gunakan tombol di samping untuk mengatur urutan)"
+                      className="flex flex-col gap-1 items-center justify-center p-1.5 text-[var(--text-secondary)] hover:text-[var(--accent)] cursor-grab active:cursor-grabbing select-none rounded-lg hover:bg-[var(--accent-soft)] transition-colors"
+                      title="Tarik handle 6-titik ini untuk menggeser urutan event"
+                      draggable={true}
+                      onDragStart={(e) => {
+                        e.stopPropagation();
+                        setDraggedIdx(idx);
+                        e.dataTransfer.setData("text/plain", String(idx));
+                        e.dataTransfer.effectAllowed = "move";
+                      }}
+                      onDragEnd={() => {
+                        setDraggedIdx(null);
+                        setDragOverIdx(null);
+                      }}
                       onClick={(e) => e.stopPropagation()}
                     >
                       <GripVertical size={18} />
@@ -970,6 +1255,18 @@ export function EventsClient({ projectId, projectName, user }: EventsClientProps
                         </span>
                       )}
 
+                      {evt.chapter && (
+                        <Link
+                          href={`/project/${projectId}/outline/${evt.chapter.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center gap-1 text-[var(--accent)] hover:underline font-semibold"
+                          title={`Buka Bab "${evt.chapter.title}" di Outline`}
+                        >
+                          <FileText size={12} />
+                          <span>Bab: {evt.chapter.title}</span>
+                        </Link>
+                      )}
+
                       {Array.isArray(evt.entitiesInvolved) && evt.entitiesInvolved.length > 0 && (
                         <span className="flex items-center gap-1">
                           <Users size={12} className="text-[var(--accent)]" />
@@ -1060,11 +1357,13 @@ export function EventsClient({ projectId, projectName, user }: EventsClientProps
                 selectedDetailEvent.entitiesInvolved.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
                     {selectedDetailEvent.entitiesInvolved.map((item) => (
-                      <div
+                      <Link
                         key={item.entityId}
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[var(--bg)] border border-[var(--border)] text-xs"
+                        href={`/project/${projectId}/entities/${item.entityId}`}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[var(--bg)] border border-[var(--border)] text-xs hover:border-[var(--accent)] hover:shadow-xs transition-all group cursor-pointer"
+                        title={`Buka Profil ${item.entity?.name || "Entitas"}`}
                       >
-                        <span className="font-semibold text-[var(--text)]">
+                        <span className="font-semibold text-[var(--text)] group-hover:text-[var(--accent)] transition-colors">
                           {item.entity?.name || "Entitas"}
                         </span>
                         {item.role && (
@@ -1072,7 +1371,10 @@ export function EventsClient({ projectId, projectName, user }: EventsClientProps
                             {item.role}
                           </span>
                         )}
-                      </div>
+                        <span className="text-[10px] text-[var(--text-secondary)] opacity-0 group-hover:opacity-100 transition-opacity">
+                          →
+                        </span>
+                      </Link>
                     ))}
                   </div>
                 ) : (
@@ -1096,9 +1398,29 @@ export function EventsClient({ projectId, projectName, user }: EventsClientProps
                         key={rc.id || idx}
                         className="p-3 rounded-xl bg-[var(--bg)] border border-[var(--border)] text-xs flex flex-col gap-1"
                       >
-                        <span className="font-bold text-[var(--text)] flex items-center gap-1.5">
+                        <span className="font-bold text-[var(--text)] flex items-center gap-1.5 flex-wrap">
                           <Link2 size={13} className="text-[var(--accent)]" />
-                          <span>{rc.sourceName || rc.relationship?.source?.name} ↔ {rc.targetName || rc.relationship?.target?.name}</span>
+                          {rc.relationship?.sourceEntityId ? (
+                            <Link
+                              href={`/project/${projectId}/entities/${rc.relationship.sourceEntityId}`}
+                              className="hover:underline hover:text-[var(--accent)]"
+                            >
+                              {rc.sourceName || rc.relationship?.source?.name}
+                            </Link>
+                          ) : (
+                            <span>{rc.sourceName || rc.relationship?.source?.name}</span>
+                          )}
+                          <span className="text-[var(--text-secondary)]">↔</span>
+                          {rc.relationship?.targetEntityId ? (
+                            <Link
+                              href={`/project/${projectId}/entities/${rc.relationship.targetEntityId}`}
+                              className="hover:underline hover:text-[var(--accent)]"
+                            >
+                              {rc.targetName || rc.relationship?.target?.name}
+                            </Link>
+                          ) : (
+                            <span>{rc.targetName || rc.relationship?.target?.name}</span>
+                          )}
                         </span>
                         <div className="flex items-center gap-1.5 text-xs">
                           {rc.beforeLabel && (
@@ -1237,17 +1559,13 @@ export function EventsClient({ projectId, projectName, user }: EventsClientProps
               </div>
 
               {/* World Date & Status Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="form-group">
-                  <label>Tanggal / Era Dunia (Opsional)</label>
-                  <input
-                    type="text"
-                    className="form-input text-xs"
-                    placeholder='Misal: "Musim Gugur Era 3"...'
-                    value={formWorldDate}
-                    onChange={(e) => setFormWorldDate(e.target.value)}
-                  />
-                </div>
+              <div className="flex flex-col gap-3">
+                <AdaptiveWorldDateInput
+                  calendarType={calendarType}
+                  worldDate={formWorldDate}
+                  onChange={setFormWorldDate}
+                  knownEras={knownEras}
+                />
 
                 <div className="form-group">
                   <label>Status Penulisan</label>
@@ -1526,30 +1844,55 @@ export function EventsClient({ projectId, projectName, user }: EventsClientProps
                     entities={allEntities}
                     entityTypes={entityTypes}
                     selectedEntityId={selectedStatusEntityId}
-                    onSelectEntity={(id) => setSelectedStatusEntityId(id)}
+                    onSelectEntity={(id) => {
+                      setSelectedStatusEntityId(id);
+                      const ent = allEntities.find((e) => e.id === id);
+                      if (ent) setStatusOldInput(ent.status || "Alive");
+                    }}
                     placeholder="Cari Karakter/Entitas..."
                     onOpenQuickCreate={() => setIsQuickCreateEntityOpen(true)}
                   />
                   <input
                     type="text"
-                    className="form-input text-xs sm:w-28"
-                    placeholder='Awal (Active)...'
+                    className="form-input text-xs sm:w-28 text-[var(--text-secondary)]"
+                    placeholder="Status Awal..."
                     value={statusOldInput}
                     onChange={(e) => setStatusOldInput(e.target.value)}
+                    readOnly
                   />
-                  <input
-                    type="text"
-                    className="form-input text-xs sm:w-32"
-                    placeholder='Baru (Deceased)...'
-                    value={statusNewInput}
+                  <select
+                    className="form-input text-xs sm:w-36 font-semibold text-[var(--rose)]"
+                    value={statusNewInput || "Deceased"}
                     onChange={(e) => setStatusNewInput(e.target.value)}
-                  />
+                  >
+                    <option value="Alive">💚 Alive (Hidup)</option>
+                    <option value="Deceased">💀 Deceased (Meninggal)</option>
+                    <option value="Unknown">❓ Unknown (Hilang)</option>
+                  </select>
                   <button
                     type="button"
                     className="btn btn-ghost text-xs border-[var(--border)] px-3 hover:border-[var(--rose)] shrink-0"
-                    onClick={handleAddStatusChange}
+                    onClick={() => {
+                      if (!selectedStatusEntityId) {
+                        setFormError("Pilih entitas terlebih dahulu");
+                        return;
+                      }
+                      const activeNewStatus = statusNewInput || "Deceased";
+                      setFormError(null);
+                      setFormStatusChanges((prev) => [
+                        ...prev,
+                        {
+                          entityId: selectedStatusEntityId,
+                          oldStatus: statusOldInput || "Alive",
+                          newStatus: activeNewStatus,
+                        },
+                      ]);
+                      setSelectedStatusEntityId("");
+                      setStatusOldInput("");
+                      setStatusNewInput("");
+                    }}
                   >
-                    + Tambah
+                    + Tambah Perubahan Status
                   </button>
                 </div>
 

@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ThreadinaryLogo } from "./ThreadinaryLogo";
+import { ProjectNavbar } from "./ProjectNavbar";
 import {
   Users,
   Network,
@@ -21,6 +22,8 @@ import {
   BookOpen,
   Check,
   AlertTriangle,
+  Activity,
+  ArrowRight,
 } from "lucide-react";
 
 interface BookItem {
@@ -80,11 +83,35 @@ export function ProjectDashboardClient({ project, user }: ProjectDashboardClient
   const [isDeletingBook, setIsDeletingBook] = useState(false);
   const [deleteBookError, setDeleteBookError] = useState<string | null>(null);
 
+  // Recent Activity Feed State & Scoped Counts
+  const [recentEntities, setRecentEntities] = useState<any[]>([]);
+  const [allChapters, setAllChapters] = useState<any[]>([]);
+  const [allEvents, setAllEvents] = useState<any[]>([]);
+  const [allEntities, setAllEntities] = useState<any[]>([]);
+
+  // Book Selection Gate Modal (Triggered on entry when project has > 1 books)
+  const [isBookSelectModalOpen, setIsBookSelectModalOpen] = useState(false);
+
   useEffect(() => {
     const isDark = document.documentElement.getAttribute("data-theme") === "dark";
     setTheme(isDark ? "dark" : "light");
 
     fetchBooks();
+    fetchProjectOverviewData();
+
+    // Check if user has chosen a book in this session
+    const hasChosen = sessionStorage.getItem(`threadinery_book_chosen_${project.id}`);
+    if (!hasChosen && project.books && project.books.length > 1) {
+      setIsBookSelectModalOpen(true);
+    }
+
+    // Listen to book selection changes from ProjectNavbar
+    const handleBookChange = (e: any) => {
+      if (e.detail?.bookId) {
+        setSelectedBookId(e.detail.bookId);
+      }
+    };
+    window.addEventListener("threadinery:book_change", handleBookChange);
 
     const handleOutsideClick = (e: MouseEvent) => {
       if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
@@ -92,8 +119,54 @@ export function ProjectDashboardClient({ project, user }: ProjectDashboardClient
       }
     };
     document.addEventListener("mousedown", handleOutsideClick);
-    return () => document.removeEventListener("mousedown", handleOutsideClick);
+
+    return () => {
+      window.removeEventListener("threadinery:book_change", handleBookChange);
+      document.removeEventListener("mousedown", handleOutsideClick);
+    };
   }, [project.id]);
+
+  const selectActiveBook = (bookId: string) => {
+    setSelectedBookId(bookId);
+    localStorage.setItem(`threadinery_active_book_${project.id}`, bookId);
+    sessionStorage.setItem(`threadinery_book_chosen_${project.id}`, "true");
+    window.dispatchEvent(new CustomEvent("threadinery:book_change", { detail: { bookId } }));
+    setIsBookSelectModalOpen(false);
+  };
+
+  const fetchProjectOverviewData = async () => {
+    try {
+      const [entitiesRes, chaptersRes, eventsRes] = await Promise.all([
+        fetch(`/api/projects/${project.id}/entities`),
+        fetch(`/api/projects/${project.id}/chapters`),
+        fetch(`/api/projects/${project.id}/events`),
+      ]);
+
+      if (entitiesRes.ok) {
+        const entData = await entitiesRes.json();
+        if (Array.isArray(entData)) {
+          setAllEntities(entData);
+          setRecentEntities(entData.slice(0, 5));
+        }
+      }
+
+      if (chaptersRes.ok) {
+        const chapData = await chaptersRes.json();
+        if (Array.isArray(chapData)) {
+          setAllChapters(chapData);
+        }
+      }
+
+      if (eventsRes.ok) {
+        const evData = await eventsRes.json();
+        if (Array.isArray(evData)) {
+          setAllEvents(evData);
+        }
+      }
+    } catch (err) {
+      console.warn("Fetch project overview data error:", err);
+    }
+  };
 
   const fetchBooks = async () => {
     try {
@@ -102,9 +175,10 @@ export function ProjectDashboardClient({ project, user }: ProjectDashboardClient
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
           setBooks(data);
-          if (!selectedBookId || !data.some((b) => b.id === selectedBookId)) {
-            setSelectedBookId(data[0].id);
-          }
+          const savedBookId = localStorage.getItem(`threadinery_active_book_${project.id}`);
+          const validSaved = data.find((b: any) => b.id === savedBookId);
+          const initialId = validSaved ? validSaved.id : data[0].id;
+          setSelectedBookId(initialId);
         }
       }
     } catch (err) {
@@ -237,8 +311,32 @@ export function ProjectDashboardClient({ project, user }: ProjectDashboardClient
     }
   };
 
-  const currentBook = books.find((b) => b.id === selectedBookId) || books[0];
+  const isAllBooks = selectedBookId === "ALL";
+  const currentBook = books.find((b) => b.id === selectedBookId) || (isAllBooks ? null : books[0]);
   const isEmpty = project._count.entities === 0 && project._count.chapters === 0;
+
+  const bookScopedChaptersCount = useMemo(() => {
+    if (isAllBooks || !selectedBookId) return allChapters.length || project._count.chapters;
+    return allChapters.filter((c) => c.bookId === selectedBookId).length;
+  }, [allChapters, selectedBookId, isAllBooks, project._count.chapters]);
+
+  const bookScopedEventsCount = useMemo(() => {
+    if (isAllBooks || !selectedBookId) return allEvents.length || project._count.events;
+    const isPrimary = books.length > 0 && selectedBookId === books[0].id;
+    return allEvents.filter((e) => e.bookId === selectedBookId || (!e.bookId && isPrimary)).length;
+  }, [allEvents, selectedBookId, isAllBooks, books, project._count.events]);
+
+  const bookScopedEntitiesCount = useMemo(() => {
+    if (isAllBooks || !selectedBookId) return allEntities.length || project._count.entities;
+    const isPrimary = books.length > 0 && selectedBookId === books[0].id;
+    return allEntities.filter((e) => {
+      const bookIds = e.metadata?.bookIds;
+      if (Array.isArray(bookIds) && bookIds.length > 0) {
+        return bookIds.includes(selectedBookId);
+      }
+      return isPrimary;
+    }).length;
+  }, [allEntities, selectedBookId, isAllBooks, books, project._count.entities]);
 
   // 7 Navigation Cards specified in instruction.md Section 9.1
   const NAV_CARDS = [
@@ -250,7 +348,7 @@ export function ProjectDashboardClient({ project, user }: ProjectDashboardClient
       icon: Users,
       color: "var(--accent)",
       bgSoft: "var(--accent-soft)",
-      countText: `${project._count.entities} entity`,
+      countText: `${bookScopedEntitiesCount} entity ${!isAllBooks && currentBook ? `(${currentBook.title})` : ""}`.trim(),
     },
     {
       id: "graph",
@@ -270,7 +368,7 @@ export function ProjectDashboardClient({ project, user }: ProjectDashboardClient
       icon: Clock,
       color: "var(--rose)",
       bgSoft: "var(--rose-soft)",
-      countText: `${project._count.events} event`,
+      countText: `${bookScopedEventsCount} event kronologi`,
     },
     {
       id: "family-tree",
@@ -300,7 +398,7 @@ export function ProjectDashboardClient({ project, user }: ProjectDashboardClient
       icon: FileText,
       color: "var(--rose)",
       bgSoft: "var(--rose-soft)",
-      countText: `${project._count.chapters} chapter`,
+      countText: `${bookScopedChaptersCount} chapter ${!isAllBooks && currentBook ? `(${currentBook.title})` : ""}`.trim(),
     },
     {
       id: "events",
@@ -310,169 +408,14 @@ export function ProjectDashboardClient({ project, user }: ProjectDashboardClient
       icon: Calendar,
       color: "var(--accent)",
       bgSoft: "var(--accent-soft)",
-      countText: `${project._count.events} event`,
+      countText: `${bookScopedEventsCount} event ${!isAllBooks && currentBook ? `(${currentBook.title})` : ""}`.trim(),
     },
   ];
 
-  // User initials
-  const initials = user.name
-    ? user.name
-        .split(" ")
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2)
-    : "RA";
-
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] transition-colors duration-300">
-      {/* Topbar Navigation */}
-      <header className="topbar">
-        <div className="topbar-inner flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center gap-1.5 text-sm text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors"
-            >
-              <ArrowLeft size={16} />
-              <span>Dashboard</span>
-            </Link>
-            <div className="w-px h-5 bg-[var(--border)]" />
-            <ThreadinaryLogo size="sm" href="/dashboard" />
-          </div>
-
-          <div className="topbar-right flex items-center gap-3">
-            {/* Custom Interactive Book Selector Popover (§9.1) */}
-            <div className="relative" ref={popoverRef}>
-              <button
-                type="button"
-                className="bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] text-xs md:text-sm font-medium rounded-xl px-3.5 py-2 flex items-center gap-2 hover:border-[var(--accent)] transition-colors shadow-sm"
-                onClick={() => setIsBookPopoverOpen(!isBookPopoverOpen)}
-              >
-                <BookOpen size={15} className="text-[var(--accent)] shrink-0" />
-                <span className="truncate max-w-[140px] md:max-w-[180px] font-semibold">
-                  {currentBook?.title || "Buku 1"}
-                </span>
-                <ChevronDown size={14} className="text-[var(--text-secondary)] shrink-0" />
-              </button>
-
-              {/* Custom Book Popover Menu */}
-              {isBookPopoverOpen && (
-                <div className="absolute right-0 top-11 w-72 bg-[var(--surface)] border border-[var(--border)] rounded-2xl shadow-xl p-2.5 z-50 flex flex-col gap-1.5 text-xs font-medium">
-                  <div className="px-3 py-1 text-[10.5px] uppercase font-bold tracking-wider text-[var(--text-secondary)] border-b border-[var(--border)] pb-2 flex items-center justify-between">
-                    <span>Daftar Buku ({books.length})</span>
-                    <span className="text-[10px] text-[var(--accent)] font-normal">Klik nama untuk pilih</span>
-                  </div>
-
-                  <div className="flex flex-col gap-1 max-h-60 overflow-y-auto pr-0.5">
-                    {books.map((b) => {
-                      const isSelected = b.id === selectedBookId;
-                      return (
-                        <div
-                          key={b.id}
-                          className={`flex items-center justify-between px-3 py-2 rounded-xl border transition-all ${
-                            isSelected
-                              ? "bg-[var(--accent-soft)] border-[var(--accent)] text-[var(--accent)] font-semibold"
-                              : "bg-[var(--bg)] border-[var(--border)] text-[var(--text)] hover:border-[var(--accent)]"
-                          }`}
-                        >
-                          {/* Book Title Selector */}
-                          <div
-                            className="flex items-center gap-2 truncate cursor-pointer flex-1 py-0.5"
-                            onClick={() => {
-                              setSelectedBookId(b.id);
-                              setIsBookPopoverOpen(false);
-                            }}
-                          >
-                            {isSelected ? (
-                              <Check size={14} className="text-[var(--accent)] shrink-0" />
-                            ) : (
-                              <BookOpen size={13} className="text-[var(--text-secondary)] shrink-0 opacity-60" />
-                            )}
-                            <span className="truncate text-xs">{b.title}</span>
-                          </div>
-
-                          {/* Explicit ALWAYS-VISIBLE Edit & Delete Action Buttons */}
-                          <div className="flex items-center gap-1 shrink-0 ml-2">
-                            <button
-                              type="button"
-                              className="px-2 py-1 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--accent)] hover:border-[var(--accent)] flex items-center gap-1 transition-all text-[11px]"
-                              onClick={(e) => openEditBookModal(e, b)}
-                              title="Edit nama buku"
-                            >
-                              <Edit2 size={12} />
-                              <span>Edit</span>
-                            </button>
-
-                            <button
-                              type="button"
-                              className="p-1.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--rose)] hover:border-[var(--rose)] transition-all"
-                              onClick={(e) => openDeleteBookModal(e, b)}
-                              title="Hapus buku"
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="h-px bg-[var(--border)] my-0.5" />
-
-                  {/* Add New Book Button */}
-                  <button
-                    type="button"
-                    className="w-full px-3 py-2 rounded-xl font-semibold text-[var(--accent)] bg-[var(--accent-soft)] hover:bg-opacity-80 flex items-center justify-center gap-1.5 transition-colors text-xs"
-                    onClick={() => {
-                      setIsBookPopoverOpen(false);
-                      setIsAddBookModalOpen(true);
-                    }}
-                  >
-                    <Plus size={15} />
-                    <span>+ Tambah Buku Baru...</span>
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Theme Toggle */}
-            <button
-              className="theme-toggle"
-              aria-label="Ganti tema"
-              onClick={toggleTheme}
-            >
-              {theme === "dark" ? (
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  className="w-4 h-4"
-                >
-                  <circle cx="12" cy="12" r="4" />
-                  <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
-                </svg>
-              ) : (
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  className="w-4 h-4"
-                >
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />
-                </svg>
-              )}
-            </button>
-
-            {/* Avatar */}
-            <div className="avatar" title={user.name || "User"}>
-              {initials}
-            </div>
-          </div>
-        </div>
-      </header>
+      {/* Unified Project Navbar */}
+      <ProjectNavbar projectId={project.id} projectName={project.name} user={user} />
 
       {/* Main Content Wrap */}
       <main className="wrap pb-16" style={{ paddingTop: "24px" }}>
@@ -488,8 +431,22 @@ export function ProjectDashboardClient({ project, user }: ProjectDashboardClient
           )}
 
           {/* Counts Total as Subtle Text (§9.1: BUKAN kartu metric besar) */}
-          <div className="text-sm text-[var(--text-secondary)] font-medium tracking-wide">
-            {project._count.entities} entity &nbsp;·&nbsp; {project._count.relationships} relationship &nbsp;·&nbsp; {project._count.events} event &nbsp;·&nbsp; {books.length} buku
+          <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-[var(--text-secondary)] font-medium tracking-wide">
+            <div>
+              {bookScopedEntitiesCount} entity &nbsp;·&nbsp; {project._count.relationships} relationship &nbsp;·&nbsp; {bookScopedEventsCount} event &nbsp;·&nbsp; {books.length} buku
+            </div>
+
+            {books.length > 1 && (
+              <button
+                type="button"
+                className="btn btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5"
+                onClick={() => setIsBookSelectModalOpen(true)}
+              >
+                <BookOpen size={13} className="text-[var(--accent)]" />
+                <span>Buku Aktif: <strong>{isAllBooks ? "Seluruh Dunia (Semua Buku)" : (currentBook?.title || "Buku 1")}</strong></span>
+                <span className="text-[10px] text-[var(--text-secondary)] underline ml-1">(Ganti)</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -570,6 +527,62 @@ export function ProjectDashboardClient({ project, user }: ProjectDashboardClient
             })}
           </div>
         </section>
+
+        {/* Recent Activity Feed (§9.1: Aktivitas terbaru muncul di sini setelah mulai menambah data) */}
+        {!isEmpty && recentEntities.length > 0 && (
+          <section className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-6 shadow-xs">
+            <div className="flex items-center justify-between gap-4 mb-4 pb-3 border-b border-[var(--border)]">
+              <div className="flex items-center gap-2">
+                <Activity size={18} className="text-[var(--accent)]" />
+                <h3 className="font-serif font-semibold text-lg text-[var(--text)]">
+                  Aktivitas Terbaru
+                </h3>
+              </div>
+              <Link
+                href={`/project/${project.id}/entities`}
+                className="text-xs font-semibold text-[var(--accent)] hover:underline flex items-center gap-1"
+              >
+                <span>Kelola Semua Entitas</span>
+                <ArrowRight size={13} />
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {recentEntities.map((ent) => (
+                <Link
+                  key={ent.id}
+                  href={`/project/${project.id}/entities/${ent.id}`}
+                  className="flex items-center justify-between p-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] hover:border-[var(--accent)] hover:bg-[var(--surface)] transition-all group"
+                >
+                  <div className="flex items-center gap-3 truncate">
+                    {ent.imageUrl ? (
+                      <img
+                        src={ent.imageUrl}
+                        alt={ent.name}
+                        className="w-9 h-9 rounded-lg object-cover border border-[var(--border)] shrink-0"
+                      />
+                    ) : (
+                      <div className="w-9 h-9 rounded-lg bg-[var(--accent-soft)] text-[var(--accent)] font-serif font-bold text-sm flex items-center justify-center shrink-0">
+                        {ent.name[0]}
+                      </div>
+                    )}
+                    <div className="truncate">
+                      <div className="font-semibold text-xs text-[var(--text)] group-hover:text-[var(--accent)] transition-colors truncate">
+                        {ent.name}
+                      </div>
+                      <div className="text-[11px] text-[var(--text-secondary)] font-medium truncate">
+                        {ent.type?.name || "Entitas"} {ent.tags?.length > 0 ? `· ${ent.tags.join(", ")}` : ""}
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-medium text-[var(--text-secondary)] shrink-0 ml-2 group-hover:text-[var(--accent)]">
+                    Lihat Profil →
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
       </main>
 
       {/* MODAL 1: TAMBAH BUKU BARU */}
@@ -773,6 +786,160 @@ export function ProjectDashboardClient({ project, user }: ProjectDashboardClient
                   {isDeletingBook ? "Menghapus..." : "Ya, Hapus Buku Ini"}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL 4: BOOK SELECTION ENTRY GATE ── */}
+      {isBookSelectModalOpen && books.length > 1 && (
+        <div
+          className="modal-overlay"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setIsBookSelectModalOpen(false);
+          }}
+          style={{ zIndex: 120 }}
+        >
+          <div
+            className="modal-content overflow-y-auto max-h-[90vh]"
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{ maxWidth: "560px", width: "100%" }}
+          >
+            <div className="modal-header border-b border-[var(--border)] pb-3">
+              <div>
+                <h2 className="flex items-center gap-2 font-serif text-lg font-semibold text-[var(--text)]">
+                  <BookOpen size={20} className="text-[var(--accent)]" />
+                  <span>Pilih Buku untuk Dikelola</span>
+                </h2>
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                  Proyek <strong>"{project.name}"</strong> memiliki {books.length} buku. Pilih buku yang ingin Anda tulis atau kelola saat ini:
+                </p>
+              </div>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => setIsBookSelectModalOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* List of Books Cards */}
+            <div className="flex flex-col gap-3 my-4">
+              {books.map((b, idx) => {
+                const isCurrent = b.id === selectedBookId;
+                return (
+                  <div
+                    key={b.id}
+                    className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-4 ${
+                      isCurrent
+                        ? "bg-[var(--accent-soft)] border-[var(--accent)] shadow-sm"
+                        : "bg-[var(--surface)] border-[var(--border)] hover:border-[var(--accent)]/60 hover:shadow-md"
+                    }`}
+                    onClick={() => selectActiveBook(b.id)}
+                  >
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center text-[var(--accent)] font-serif font-bold text-sm shrink-0">
+                        {idx + 1}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-serif font-semibold text-sm text-[var(--text)] truncate">
+                            {b.title}
+                          </h4>
+                          {isCurrent && (
+                            <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[var(--accent)] text-white">
+                              Aktif
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                          Kelola outline, event, dan alur cerita buku ini
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      className={`btn text-xs px-4 py-2 shrink-0 ${
+                        isCurrent ? "btn-primary" : "btn-secondary"
+                      }`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        selectActiveBook(b.id);
+                      }}
+                    >
+                      Buka Buku Ini →
+                    </button>
+                  </div>
+                );
+              })}
+
+              {/* Option: Seluruh Dunia (Semua Buku) */}
+              <div
+                className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-4 ${
+                  selectedBookId === "ALL"
+                    ? "bg-[var(--accent-soft)] border-[var(--accent)] shadow-sm"
+                    : "bg-[var(--surface)] border-[var(--border)] hover:border-[var(--accent)]/60 hover:shadow-md"
+                }`}
+                onClick={() => selectActiveBook("ALL")}
+              >
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center text-[var(--accent)] font-serif font-bold text-sm shrink-0">
+                    🌐
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-serif font-semibold text-sm text-[var(--text)] truncate">
+                        Seluruh Dunia (Semua Buku)
+                      </h4>
+                      {selectedBookId === "ALL" && (
+                        <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[var(--accent)] text-white">
+                          Aktif
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                      Lihat seluruh data entitas, chapter, dan event se-dunia tanpa filter
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  className={`btn text-xs px-4 py-2 shrink-0 ${
+                    selectedBookId === "ALL" ? "btn-primary" : "btn-secondary"
+                  }`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    selectActiveBook("ALL");
+                  }}
+                >
+                  Lihat Semua →
+                </button>
+              </div>
+            </div>
+
+            {/* Footer with Create New Book option */}
+            <div className="flex items-center justify-between pt-3 border-t border-[var(--border)]">
+              <button
+                type="button"
+                className="btn btn-ghost text-xs text-[var(--accent)] flex items-center gap-1.5"
+                onClick={() => {
+                  setIsBookSelectModalOpen(false);
+                  setIsAddBookModalOpen(true);
+                }}
+              >
+                <Plus size={14} />
+                <span>+ Buat Buku Baru di Seri Ini</span>
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary text-xs px-4"
+                onClick={() => setIsBookSelectModalOpen(false)}
+              >
+                Tutup
+              </button>
             </div>
           </div>
         </div>

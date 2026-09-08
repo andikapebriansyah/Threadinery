@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ThreadinaryLogo } from "./ThreadinaryLogo";
+import { ProjectNavbar } from "./ProjectNavbar";
 import { SmartEntityPickerWithFilters } from "./SmartEntityPickerWithFilters";
 import {
   ArrowLeft,
@@ -126,6 +127,17 @@ export function OutlineClient({
     setTheme(isDark ? "dark" : "light");
 
     fetchAllOutlineData();
+
+    const handleBookChange = (e: any) => {
+      if (e.detail?.bookId) {
+        setSelectedBookFilter(e.detail.bookId);
+      }
+    };
+    window.addEventListener("threadinery:book_change", handleBookChange);
+
+    return () => {
+      window.removeEventListener("threadinery:book_change", handleBookChange);
+    };
   }, [projectId]);
 
   const fetchAllOutlineData = async () => {
@@ -141,7 +153,13 @@ export function OutlineClient({
 
       if (booksRes.ok) {
         const booksData = await booksRes.json();
-        if (Array.isArray(booksData)) setBooks(booksData);
+        if (Array.isArray(booksData) && booksData.length > 0) {
+          setBooks(booksData);
+          const savedBookId = localStorage.getItem(`threadinery_active_book_${projectId}`);
+          const validSaved = booksData.find((b: any) => b.id === savedBookId);
+          const activeId = validSaved ? validSaved.id : booksData[0].id;
+          setSelectedBookFilter(activeId);
+        }
       }
 
       if (chaptersRes.ok) {
@@ -348,64 +366,10 @@ export function OutlineClient({
     }
   };
 
-  const initials = user.name
-    ? user.name
-        .split(" ")
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2)
-    : "RA";
-
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] transition-colors duration-300">
-      {/* Topbar Navigation */}
-      <header className="topbar">
-        <div className="topbar-inner flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <Link
-              href={`/project/${projectId}`}
-              className="inline-flex items-center gap-1.5 text-sm text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors"
-            >
-              <ArrowLeft size={16} />
-              <span>Project Dashboard</span>
-            </Link>
-            <div className="w-px h-5 bg-[var(--border)]" />
-            <ThreadinaryLogo size="sm" href="/dashboard" />
-          </div>
-
-          <div className="topbar-right flex items-center gap-3">
-            <button
-              className="btn btn-primary text-xs px-4 py-2 flex items-center gap-1.5"
-              onClick={handleOpenCreateModal}
-            >
-              <Plus size={15} />
-              <span>Tambah Bab Baru</span>
-            </button>
-
-            <button
-              className="theme-toggle"
-              aria-label="Ganti tema"
-              onClick={toggleTheme}
-            >
-              {theme === "dark" ? (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                  <circle cx="12" cy="12" r="4" />
-                  <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />
-                </svg>
-              )}
-            </button>
-
-            <div className="avatar" title={user.name || "User"}>
-              {initials}
-            </div>
-          </div>
-        </div>
-      </header>
+      {/* Unified Project Navbar */}
+      <ProjectNavbar projectId={projectId} projectName={projectName} user={user} />
 
       {/* Main Full-Width Container */}
       <main className="wrap py-8">

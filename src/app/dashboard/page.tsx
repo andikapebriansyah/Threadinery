@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { Metadata } from "next";
 import { DashboardClient } from "@/components/DashboardClient";
 
@@ -10,12 +11,9 @@ export const metadata: Metadata = {
 export default async function DashboardPage() {
   const session = await auth();
 
-  // Fallback user untuk mempermudah debugging tanpa login
-  const user = session?.user || {
-    id: "dev-user-id",
-    name: "Penulis Demo",
-    email: "writer@threadinery.dev",
-  };
+  if (!session?.user) {
+    redirect("/");
+  }
 
-  return <DashboardClient user={user} />;
+  return <DashboardClient user={session.user} />;
 }

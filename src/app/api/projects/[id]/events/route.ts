@@ -7,13 +7,23 @@ export async function GET(
 ) {
   try {
     const { id: projectId } = await params;
+    const { searchParams } = new URL(req.url);
+    const bookId = searchParams.get("bookId");
+
+    const whereClause: any = { projectId };
+    if (bookId && bookId !== "ALL" && bookId !== "all") {
+      whereClause.bookId = bookId;
+    }
 
     const events = await prisma.event.findMany({
-      where: { projectId },
+      where: whereClause,
       orderBy: [{ orderInChapter: "asc" }, { createdAt: "asc" }],
       include: {
         book: {
           select: { id: true, title: true },
+        },
+        chapter: {
+          select: { id: true, title: true, orderIndex: true },
         },
         entitiesInvolved: {
           include: {
@@ -49,7 +59,7 @@ export async function GET(
   } catch (error: any) {
     console.error("GET /api/projects/[id]/events error:", error);
     return NextResponse.json(
-      { error: "Gagal mengambil daftar event" },
+      { error: error?.message || "Gagal mengambil daftar event", details: String(error) },
       { status: 500 }
     );
   }
@@ -151,6 +161,7 @@ export async function POST(
         bookId: bookId || null,
         writingStatus: writingStatus || "planned",
         orderInChapter: nextOrder,
+        orderIndex: nextOrder,
         entitiesInvolved:
           Array.isArray(entitiesInvolved) && entitiesInvolved.length > 0
             ? {
@@ -210,6 +221,18 @@ export async function POST(
         },
       },
     });
+
+    // Sync new status into Entity model
+    if (Array.isArray(statusChanges)) {
+      for (const sc of statusChanges) {
+        if (sc.entityId && sc.newStatus) {
+          await prisma.entity.update({
+            where: { id: sc.entityId },
+            data: { status: sc.newStatus.trim() },
+          }).catch((err) => console.warn("Sync status update error:", err));
+        }
+      }
+    }
 
     return NextResponse.json(createdEvent, { status: 201 });
   } catch (error: any) {

@@ -34,6 +34,7 @@ import {
   HardDrive,
   RotateCcw,
   RefreshCw,
+  Shield,
 } from "lucide-react";
 
 interface BookData {
@@ -89,6 +90,172 @@ interface ChapterDetailClientProps {
   };
 }
 
+function AdaptiveWorldDateInput({
+  calendarType,
+  worldDate,
+  onChange,
+  knownEras,
+}: {
+  calendarType: "fantasy" | "real" | "custom";
+  worldDate: string;
+  onChange: (val: string) => void;
+  knownEras: string[];
+}) {
+  const [overrideFreeText, setOverrideFreeText] = React.useState(false);
+
+  const parsedYear = React.useMemo(() => {
+    const m = worldDate.match(/Tahun\s+(\d+)/i);
+    return m ? m[1] : "";
+  }, [worldDate]);
+
+  const parsedEra = React.useMemo(() => {
+    const m = worldDate.match(/(?:Era|Zaman)\s+[^,\)\)]+/i);
+    if (m) return m[0].trim();
+    const parts = worldDate.split(",");
+    return parts.length > 1 ? parts[1].trim() : "";
+  }, [worldDate]);
+
+  const [inputYear, setInputYear] = React.useState(parsedYear);
+  const [selectedEra, setSelectedEra] = React.useState(parsedEra || knownEras[0] || "Era Pertama");
+  const [customEra, setCustomEra] = React.useState("");
+
+  React.useEffect(() => {
+    const y = worldDate.match(/Tahun\s+(\d+)/i)?.[1] || "";
+    setInputYear(y);
+
+    const eraM = worldDate.match(/(?:Era|Zaman)\s+[^,\)\)]+/i)?.[0]?.trim();
+    if (eraM) {
+      setSelectedEra(eraM);
+      setCustomEra("");
+    } else if (knownEras.length > 0 && !selectedEra) {
+      setSelectedEra(knownEras[0]);
+    }
+  }, [worldDate, knownEras]);
+
+  const updateFantasyDate = (yStr: string, eraStr: string, customEraStr: string) => {
+    const activeEra = eraStr === "NEW_CUSTOM" ? customEraStr.trim() : eraStr;
+    let finalVal = "";
+    if (yStr.trim()) {
+      finalVal = activeEra ? `Tahun ${yStr.trim()}, ${activeEra}` : `Tahun ${yStr.trim()}`;
+    } else {
+      finalVal = activeEra || "";
+    }
+    onChange(finalVal);
+  };
+
+  if (calendarType === "fantasy" && !overrideFreeText) {
+    return (
+      <div className="flex flex-col gap-2 bg-[var(--surface)] p-2.5 rounded-xl border border-[var(--border)]">
+        <div className="flex items-center justify-between">
+          <span className="text-[10.5px] font-bold text-[var(--accent)] flex items-center gap-1">
+            <Shield size={12} /> Format Era Fantasi
+          </span>
+          <button
+            type="button"
+            className="text-[10px] text-[var(--text-secondary)] hover:text-[var(--accent)] underline cursor-pointer"
+            onClick={() => setOverrideFreeText(true)}
+          >
+            Teks Bebas Custom
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div>
+            <label className="text-[10px] text-[var(--text-secondary)] font-semibold mb-0.5 block">
+              Pilih Era Dunia *
+            </label>
+            <select
+              className="form-input text-xs"
+              value={selectedEra}
+              onChange={(e) => {
+                const newEra = e.target.value;
+                setSelectedEra(newEra);
+                updateFantasyDate(inputYear, newEra, customEra);
+              }}
+            >
+              {knownEras.map((era) => (
+                <option key={era} value={era}>
+                  {era}
+                </option>
+              ))}
+              <option value="NEW_CUSTOM">+ Buat Era Kustom Baru...</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-[10px] text-[var(--text-secondary)] font-semibold mb-0.5 block">
+              Angka Tahun *
+            </label>
+            <input
+              type="number"
+              className="form-input text-xs"
+              placeholder="Misal: 1420"
+              value={inputYear}
+              onChange={(e) => {
+                const newY = e.target.value;
+                setInputYear(newY);
+                updateFantasyDate(newY, selectedEra, customEra);
+              }}
+            />
+          </div>
+        </div>
+
+        {selectedEra === "NEW_CUSTOM" && (
+          <div className="mt-1">
+            <label className="text-[10px] text-[var(--accent)] font-semibold mb-0.5 block">
+              Nama Era Kustom Baru *
+            </label>
+            <input
+              type="text"
+              className="form-input text-xs"
+              placeholder='Misal: "Era Kegelapan"...'
+              value={customEra}
+              onChange={(e) => {
+                const newC = e.target.value;
+                setCustomEra(newC);
+                updateFantasyDate(inputYear, selectedEra, newC);
+              }}
+              autoFocus
+            />
+          </div>
+        )}
+
+        <div className="text-[10px] text-[var(--text-secondary)] font-serif bg-[var(--bg)] px-2 py-1 rounded border border-[var(--border)]">
+          ⚡ Hasil: <strong className="text-[var(--accent)]">{worldDate || "(Belum diisi)"}</strong>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <label className="text-xs">Tanggal / Era Dunia (Opsional)</label>
+        {calendarType === "fantasy" && (
+          <button
+            type="button"
+            className="text-[10px] text-[var(--accent)] font-semibold hover:underline cursor-pointer"
+            onClick={() => setOverrideFreeText(false)}
+          >
+            ← Form Era Fantasi
+          </button>
+        )}
+      </div>
+      <input
+        type="text"
+        className="form-input text-xs"
+        placeholder={
+          calendarType === "real"
+            ? 'Misal: "15 Agustus 1945"...'
+            : 'Misal: "Musim Gugur Era 3"...'
+        }
+        value={worldDate}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </div>
+  );
+}
+
 export function ChapterDetailClient({
   projectId,
   projectName,
@@ -126,6 +293,30 @@ export function ChapterDetailClient({
   const [allEvents, setAllEvents] = useState<EventData[]>([]);
   const [allEntities, setAllEntities] = useState<EntitySimple[]>([]);
   const [entityTypes, setEntityTypes] = useState<EntityTypeItem[]>([]);
+  const [calendarType, setCalendarType] = useState<"fantasy" | "real" | "custom">("fantasy");
+
+  const knownEras = useMemo(() => {
+    const eraSet = new Set<string>();
+    allEvents.forEach((evt) => {
+      if (evt.worldDate) {
+        const eraMatch = evt.worldDate.match(/(?:Era|Zaman)\s+[^,\)\)]+/i);
+        if (eraMatch) {
+          eraSet.add(eraMatch[0].trim());
+        } else {
+          const parts = evt.worldDate.split(",");
+          if (parts.length > 1) eraSet.add(parts[1].trim());
+        }
+      }
+    });
+
+    if (eraSet.size === 0) {
+      eraSet.add("Era Pertama");
+      eraSet.add("Era Kedua");
+      eraSet.add("Era Ketiga");
+    }
+
+    return Array.from(eraSet);
+  }, [allEvents]);
 
   // Insertion Popups & Smart Pickers
   const [isInsertEventOpen, setIsInsertEventOpen] = useState(false);
@@ -221,12 +412,18 @@ export function ChapterDetailClient({
   const fetchMasterAndChapterData = async () => {
     try {
       setLoading(true);
-      const [booksRes, eventsRes, entitiesRes, typesRes] = await Promise.all([
+      const [booksRes, eventsRes, entitiesRes, typesRes, projRes] = await Promise.all([
         fetch(`/api/projects/${projectId}/books`),
         fetch(`/api/projects/${projectId}/events`),
         fetch(`/api/projects/${projectId}/entities`),
         fetch(`/api/projects/${projectId}/entity-types`),
+        fetch(`/api/projects/${projectId}`),
       ]);
+
+      if (projRes.ok) {
+        const pData = await projRes.json();
+        if (pData.calendarType) setCalendarType(pData.calendarType);
+      }
 
       let fetchedBooks: BookData[] = [];
       if (booksRes.ok) {
@@ -272,7 +469,12 @@ export function ChapterDetailClient({
           }
         }
       } else {
-        if (fetchedBooks.length > 0) setBookId(fetchedBooks[0].id);
+        const activeBookId = typeof window !== "undefined" ? localStorage.getItem(`threadinery_active_book_${projectId}`) : null;
+        if (activeBookId && activeBookId !== "ALL" && fetchedBooks.some((b) => b.id === activeBookId)) {
+          setBookId(activeBookId);
+        } else if (fetchedBooks.length > 0) {
+          setBookId(fetchedBooks[0].id);
+        }
       }
     } catch (err) {
       console.warn("Fetch chapter detail error:", err);
@@ -1195,8 +1397,8 @@ export function ChapterDetailClient({
                       <h4 className="text-[10.5px] font-bold uppercase tracking-wider text-[var(--accent)] mb-1 font-serif">
                         Biodata Kunci
                       </h4>
-                      <div className="bg-[var(--bg)] p-3 rounded-xl border border-[var(--border)] flex flex-col gap-1.5 text-xs">
-                        {Object.entries(previewEntity.metadata).slice(0, 4).map(([k, v]) => (
+                      <div className="bg-[var(--bg)] p-3 rounded-xl border border-[var(--border)] flex flex-col gap-1.5 text-xs max-h-52 overflow-y-auto">
+                        {Object.entries(previewEntity.metadata).map(([k, v]) => (
                           <div key={k} className="flex justify-between gap-2 border-b border-[var(--border)] pb-1 last:border-none">
                             <span className="text-[var(--text-secondary)] font-semibold font-serif">{k}:</span>
                             <span className="font-medium text-[var(--text)] truncate">{String(v)}</span>
@@ -1423,16 +1625,12 @@ export function ChapterDetailClient({
                 />
               </div>
 
-              <div className="form-group">
-                <label className="text-xs">Tanggal / Era Dunia (Opsional)</label>
-                <input
-                  type="text"
-                  className="form-input text-xs"
-                  placeholder='Misal: "Musim Gugur Tahun ke-3"...'
-                  value={quickEventWorldDate}
-                  onChange={(e) => setQuickEventWorldDate(e.target.value)}
-                />
-              </div>
+              <AdaptiveWorldDateInput
+                calendarType={calendarType}
+                worldDate={quickEventWorldDate}
+                onChange={setQuickEventWorldDate}
+                knownEras={knownEras}
+              />
 
               <div className="flex justify-end gap-3 pt-2 border-t border-[var(--border)]">
                 <button
@@ -1475,6 +1673,7 @@ export function ChapterDetailClient({
       {editingEntityModal && (
         <EditEntityModal
           projectId={projectId}
+          isOpen={true}
           entity={editingEntityModal as any}
           onClose={() => setEditingEntityModal(null)}
           onSuccess={() => {

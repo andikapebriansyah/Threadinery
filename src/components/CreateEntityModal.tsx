@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Plus, X, ChevronDown, ChevronUp, Image as ImageIcon, Sparkles, Heart, ShieldAlert, KeyRound, Network } from "lucide-react";
+import React, { useState, useEffect, useMemo } from "react";
+import { Plus, X, ChevronDown, ChevronUp, Image as ImageIcon, Sparkles, Heart, ShieldAlert, KeyRound, Network, MapPin } from "lucide-react";
+import { SmartEntityPickerWithFilters } from "./SmartEntityPickerWithFilters";
 
 interface EntityTypeItem {
   id: string;
@@ -21,6 +22,9 @@ interface CreateEntityModalProps {
   onClose: () => void;
   onSuccess: (createdEntity: any) => void;
   entityTypes: EntityTypeItem[];
+  defaultTypeId?: string;
+  lockType?: boolean;
+  defaultLocationId?: string;
 }
 
 const QUICK_CHIP_LABELS = [
@@ -35,11 +39,20 @@ const QUICK_CHIP_LABELS = [
   "Mentor",
 ];
 
+const LOCATION_QUICK_CHIP_LABELS = [
+  "Berada di sini",
+  "Tinggal di sini",
+  "Lahir di sini",
+  "Markas",
+  "Beroperasi di sini",
+  "Ditemukan di sini",
+  "Pernah ke sini",
+];
+
 const DEFAULT_STATUS_OPTIONS = [
-  "Aktif / Hidup",
-  "Meninggal / Almarhum",
-  "Hilang / Tidak Diketahui",
-  "Rusak / Hancur",
+  { value: "Alive", label: "💚 Hidup / Aktif (Alive)" },
+  { value: "Deceased", label: "💀 Meninggal / Hancur (Deceased)" },
+  { value: "Unknown", label: "❓ Tidak Diketahui / Hilang (Unknown)" },
 ];
 
 export function CreateEntityModal({
@@ -48,12 +61,15 @@ export function CreateEntityModal({
   onClose,
   onSuccess,
   entityTypes,
+  defaultTypeId,
+  lockType = false,
+  defaultLocationId = "",
 }: CreateEntityModalProps) {
   // Required Base Fields (§7.3)
   const [name, setName] = useState("");
-  const [selectedTypeId, setSelectedTypeId] = useState("");
+  const [selectedTypeId, setSelectedTypeId] = useState(defaultTypeId || "");
   const [description, setDescription] = useState("");
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState("Alive");
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState<string[]>([]);
 
@@ -73,6 +89,7 @@ export function CreateEntityModal({
   const [existingEntities, setExistingEntities] = useState<SimpleEntity[]>([]);
   const [relTargetEntityId, setRelTargetEntityId] = useState("");
   const [relLabel, setRelLabel] = useState("");
+  const [domicileLocationId, setDomicileLocationId] = useState<string>(defaultLocationId || "");
 
   // New Custom Type Creation
   const [isCreatingCustomType, setIsCreatingCustomType] = useState(false);
@@ -81,11 +98,57 @@ export function CreateEntityModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const BUILTIN_KEYS = useMemo(() => [
+    "Ras",
+    "Usia",
+    "Pekerjaan",
+    "Penampilan Fisik",
+    "Kesukaan",
+    "Ketakutan",
+    "Rahasia Kelam",
+    "Kepribadian",
+    "Motivasi",
+    "Lokasi Induk",
+    "Iklim",
+    "Penguasa",
+    "Pemimpin",
+    "Didirikan",
+    "Ideologi",
+    "Pemilik Saat Ini",
+    "Pencipta",
+    "Kekuatan",
+    "Aturan Utama",
+    "Pengguna",
+  ], []);
+
+  // World attribute suggestions for current selected type
+  const suggestedAttributeKeys = useMemo(() => {
+    const keysSet = new Set<string>();
+    existingEntities.forEach((ent: any) => {
+      if (ent.typeId === selectedTypeId && ent.metadata) {
+        Object.keys(ent.metadata).forEach((k) => {
+          if (!BUILTIN_KEYS.includes(k)) {
+            keysSet.add(k);
+          }
+        });
+      }
+    });
+    return Array.from(keysSet);
+  }, [existingEntities, selectedTypeId, BUILTIN_KEYS]);
+
   useEffect(() => {
-    if (entityTypes.length > 0 && !selectedTypeId) {
+    if (defaultTypeId) {
+      setSelectedTypeId(defaultTypeId);
+    } else if (entityTypes.length > 0 && !selectedTypeId) {
       setSelectedTypeId(entityTypes[0].id);
     }
-  }, [entityTypes, selectedTypeId]);
+  }, [entityTypes, selectedTypeId, defaultTypeId]);
+
+  useEffect(() => {
+    if (defaultLocationId) {
+      setDomicileLocationId(defaultLocationId);
+    }
+  }, [defaultLocationId]);
 
   useEffect(() => {
     if (isOpen) {
@@ -180,9 +243,23 @@ export function CreateEntityModal({
         }
       });
 
+      // Auto-assign active book to new entity
+      const activeBookId = typeof window !== "undefined" ? localStorage.getItem(`threadinery_active_book_${projectId}`) : null;
+      if (activeBookId && activeBookId !== "ALL") {
+        combinedMetadata.bookIds = [activeBookId];
+      }
+
       const initialRel =
         relTargetEntityId && relLabel.trim()
           ? { targetEntityId: relTargetEntityId, label: relLabel.trim() }
+          : domicileLocationId
+          ? {
+              targetEntityId: domicileLocationId,
+              label:
+                typeNameLower.includes("organisasi") || typeNameLower.includes("organization")
+                  ? "Markas"
+                  : "Tinggal di sini",
+            }
           : null;
 
       const res = await fetch(`/api/projects/${projectId}/entities`, {
@@ -269,68 +346,69 @@ export function CreateEntityModal({
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="form-group">
-              <label className="flex items-center justify-between">
-                <span>Tipe Entity *</span>
-                <button
-                  type="button"
-                  className="text-xs text-[var(--accent)] font-semibold hover:underline bg-transparent border-none p-0 cursor-pointer"
-                  onClick={() => setIsCreatingCustomType(!isCreatingCustomType)}
-                >
-                  + Tipe kustom
-                </button>
-              </label>
-
-              {isCreatingCustomType ? (
-                <div className="flex gap-2 mt-1">
-                  <input
-                    type="text"
-                    className="form-input flex-1"
-                    placeholder="Nama tipe kustom baru..."
-                    value={newTypeName}
-                    onChange={(e) => setNewTypeName(e.target.value)}
-                  />
+          <div className={`grid grid-cols-1 ${lockType ? "" : "sm:grid-cols-2"} gap-3`}>
+            {!lockType && (
+              <div className="form-group">
+                <label className="flex items-center justify-between">
+                  <span>Tipe Entity *</span>
                   <button
                     type="button"
-                    className="btn btn-primary text-xs"
-                    onClick={handleCreateCustomType}
+                    className="text-xs text-[var(--accent)] font-semibold hover:underline bg-transparent border-none p-0 cursor-pointer"
+                    onClick={() => setIsCreatingCustomType(!isCreatingCustomType)}
                   >
-                    Tambah
+                    + Tipe kustom
                   </button>
-                </div>
-              ) : (
-                <select
-                  className="form-input text-xs"
-                  value={selectedTypeId}
-                  onChange={(e) => setSelectedTypeId(e.target.value)}
-                  required
-                >
-                  {entityTypes.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} {t.isDefault ? "" : "(Custom)"}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
+                </label>
 
-            {/* STATUS FIELD */}
+                {isCreatingCustomType ? (
+                  <div className="flex gap-2 mt-1">
+                    <input
+                      type="text"
+                      className="form-input flex-1"
+                      placeholder="Nama tipe kustom baru..."
+                      value={newTypeName}
+                      onChange={(e) => setNewTypeName(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-primary text-xs"
+                      onClick={handleCreateCustomType}
+                    >
+                      Tambah
+                    </button>
+                  </div>
+                ) : (
+                  <select
+                    className="form-input text-xs"
+                    value={selectedTypeId}
+                    onChange={(e) => setSelectedTypeId(e.target.value)}
+                    required
+                  >
+                    {entityTypes.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} {t.isDefault ? "" : "(Custom)"}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
+
+            {/* STATUS UTAMA (MANDATORY DROPDOWN AT TOP OF PROFILE SHEET) */}
             <div className="form-group">
-              <label>Status (Opsional)</label>
-              <input
-                type="text"
-                className="form-input text-xs"
-                placeholder="Misal: Aktif / Hidup, Meninggal, Hilang..."
+              <label className="font-bold text-[var(--accent)]">Status Keberadaan Utama *</label>
+              <select
+                className="form-input text-xs font-semibold"
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
-                list="status-options"
-              />
-              <datalist id="status-options">
+                required
+              >
                 {DEFAULT_STATUS_OPTIONS.map((opt) => (
-                  <option key={opt} value={opt} />
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
                 ))}
-              </datalist>
+              </select>
             </div>
           </div>
 
@@ -414,6 +492,33 @@ export function CreateEntityModal({
                   {/* RICH CHARACTER SHEET FIELDS */}
                   {typeNameLower.includes("character") && (
                     <>
+                      {/* DOMICILE LOCATION FIELD */}
+                      <div className="form-group mb-3">
+                        <label className="text-xs font-semibold text-[var(--text-secondary)] mb-1 flex items-center gap-1.5">
+                          <MapPin size={13} className="text-[var(--accent)]" />
+                          <span>Lokasi Saat Ini / Domisili (Opsional)</span>
+                        </label>
+                        <SmartEntityPickerWithFilters
+                          entities={existingEntities}
+                          entityTypes={entityTypes}
+                          typeRestriction="Location"
+                          selectedEntityId={domicileLocationId}
+                          onSelectEntity={(id) => setDomicileLocationId(id)}
+                          placeholder="Pilih kota / wilayah tempat tinggal..."
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label>Ras / Spesies</label>
+                        <input
+                          type="text"
+                          className="form-input text-xs"
+                          placeholder="Misal: Manusia, Elf, Vampir..."
+                          value={details["Ras"] || ""}
+                          onChange={(e) => updateDetail("Ras", e.target.value)}
+                        />
+                      </div>
+
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="form-group">
                           <label>Usia</label>
@@ -671,7 +776,7 @@ export function CreateEntityModal({
               )}
             </div>
 
-            {/* Section B: INITIAL RELATIONSHIP (§7.5) */}
+            {/* Section B: INITIAL RELATIONSHIP (§7.5 / Location Entitas yang berada di sini) */}
             {existingEntities.length > 0 && (
               <div>
                 <button
@@ -680,8 +785,16 @@ export function CreateEntityModal({
                   onClick={() => setShowInitialRel(!showInitialRel)}
                 >
                   <span className="flex items-center gap-2">
-                    <Network size={14} className="text-[var(--accent)]" />
-                    <span>Hubungkan relationship awal (Opsional §7.5)</span>
+                    {typeNameLower.includes("location") || typeNameLower.includes("lokasi") ? (
+                      <MapPin size={14} className="text-[var(--accent)]" />
+                    ) : (
+                      <Network size={14} className="text-[var(--accent)]" />
+                    )}
+                    <span>
+                      {typeNameLower.includes("location") || typeNameLower.includes("lokasi")
+                        ? "Entitas yang berada di lokasi ini (Opsional)"
+                        : "Hubungkan relationship awal (Opsional §7.5)"}
+                    </span>
                   </span>
                   {showInitialRel ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                 </button>
@@ -689,25 +802,35 @@ export function CreateEntityModal({
                 {showInitialRel && (
                   <div className="p-4 mt-2 rounded-xl bg-[var(--bg)] border border-[var(--border)] flex flex-col gap-3 text-xs">
                     <div className="form-group">
-                      <label>Target Entity yang Sudah Ada</label>
-                      <select
-                        className="form-input text-xs"
-                        value={relTargetEntityId}
-                        onChange={(e) => setRelTargetEntityId(e.target.value)}
-                      >
-                        <option value="">-- Pilih Target Entity --</option>
-                        {existingEntities.map((ent) => (
-                          <option key={ent.id} value={ent.id}>
-                            {ent.name}
-                          </option>
-                        ))}
-                      </select>
+                      <label className="text-xs font-semibold text-[var(--text-secondary)] mb-1.5 block">
+                        {typeNameLower.includes("location") || typeNameLower.includes("lokasi")
+                          ? "Pilih Entitas (Karakter, Organisasi, dll.) yang Berada di Sini"
+                          : "Target Entity yang Sudah Ada"}
+                      </label>
+                      <SmartEntityPickerWithFilters
+                        entities={existingEntities}
+                        entityTypes={entityTypes}
+                        selectedEntityId={relTargetEntityId}
+                        onSelectEntity={(id) => setRelTargetEntityId(id)}
+                        placeholder={
+                          typeNameLower.includes("location") || typeNameLower.includes("lokasi")
+                            ? "Cari karakter / entitas untuk ditempatkan di sini..."
+                            : "Cari target entitas relasi..."
+                        }
+                      />
                     </div>
 
                     <div className="form-group">
-                      <label>Label Relasi (Pilih Cepat atau Ketik Custom)</label>
+                      <label>
+                        {typeNameLower.includes("location") || typeNameLower.includes("lokasi")
+                          ? "Status / Relasi Keberadaan di Lokasi"
+                          : "Label Relasi (Pilih Cepat atau Ketik Custom)"}
+                      </label>
                       <div className="flex flex-wrap gap-1.5 mb-2">
-                        {QUICK_CHIP_LABELS.map((chip) => (
+                        {(typeNameLower.includes("location") || typeNameLower.includes("lokasi")
+                          ? LOCATION_QUICK_CHIP_LABELS
+                          : QUICK_CHIP_LABELS
+                        ).map((chip) => (
                           <button
                             key={chip}
                             type="button"
@@ -726,7 +849,11 @@ export function CreateEntityModal({
                       <input
                         type="text"
                         className="form-input text-xs"
-                        placeholder="Misal: Ibu, Teman, Musuh..."
+                        placeholder={
+                          typeNameLower.includes("location") || typeNameLower.includes("lokasi")
+                            ? 'Misal: "Tinggal di sini", "Markas", "Tertahan"...'
+                            : "Misal: Ibu, Teman, Musuh..."
+                        }
                         value={relLabel}
                         onChange={(e) => setRelLabel(e.target.value)}
                       />
@@ -741,7 +868,7 @@ export function CreateEntityModal({
               <button
                 type="button"
                 className="w-full flex items-center justify-between p-3.5 rounded-xl bg-[var(--bg)] border border-[var(--border)] text-xs font-semibold text-[var(--text)] hover:border-[var(--accent)] transition-colors"
-                onClick={handleAddCustomProp}
+                onClick={() => setShowCustomProps(!showCustomProps)}
               >
                 <span className="flex items-center gap-2">
                   <Plus size={14} className="text-[var(--accent)]" />
@@ -751,11 +878,46 @@ export function CreateEntityModal({
               </button>
 
               <p className="text-[11px] text-[var(--text-secondary)] mt-1.5 px-1 leading-relaxed">
-                Tambahkan detail unik yang khas untuk entitas ini — seperti Hobi, Kesukaan, Ketakutan Terbesar, atau Rahasia.
+                Tambahkan detail unik yang khas untuk entitas ini — seperti Faksi, Senjata Utama, Role, Hobi, atau Rahasia.
               </p>
 
-              {showCustomProps && customProps.length > 0 && (
+              {showCustomProps && (
                 <div className="p-4 mt-2 rounded-xl bg-[var(--bg)] border border-[var(--border)] flex flex-col gap-3">
+                  {/* Suggested World Attributes Template Chips */}
+                  {suggestedAttributeKeys.length > 0 && (
+                    <div className="flex flex-col gap-1.5 p-2.5 rounded-xl bg-[var(--surface)] border border-[var(--border)]">
+                      <span className="text-[10.5px] font-bold text-[var(--accent)] flex items-center gap-1">
+                        <Sparkles size={12} /> Sugesti Atribut Lain yang Ada di Dunia Ini:
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {suggestedAttributeKeys.map((sKey: string) => {
+                          const isAdded = customProps.some((p) => p.key === sKey);
+                          return (
+                            <button
+                              key={sKey}
+                              type="button"
+                              className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all cursor-pointer ${
+                                isAdded
+                                  ? "bg-[var(--accent-soft)] text-[var(--accent)] border-[var(--accent)] font-bold"
+                                  : "bg-[var(--bg)] text-[var(--text)] border-[var(--border)] hover:border-[var(--accent)]"
+                              }`}
+                              onClick={() => {
+                                if (!isAdded) {
+                                  setCustomProps((prev) => [
+                                    ...prev,
+                                    { id: `prop-${Date.now()}-${Math.random()}`, key: sKey, value: "" },
+                                  ]);
+                                }
+                              }}
+                            >
+                              + {sKey}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {customProps.map((prop) => (
                     <div key={prop.id} className="flex items-center gap-2 w-full">
                       <div className="flex-1">
@@ -787,6 +949,16 @@ export function CreateEntityModal({
                       </button>
                     </div>
                   ))}
+
+                  {/* Tombol Tambah Baris Atribut Custom Baru */}
+                  <button
+                    type="button"
+                    className="btn btn-secondary text-xs py-2 px-3 flex items-center justify-center gap-1.5 w-full mt-1 border-dashed"
+                    onClick={handleAddCustomProp}
+                  >
+                    <Plus size={13} />
+                    <span>Tambah Baris Atribut Baru</span>
+                  </button>
                 </div>
               )}
             </div>

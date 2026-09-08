@@ -5,15 +5,11 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mail, Lock, User, ArrowRight, Check } from "lucide-react";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
 import { ThreadinaryLogo } from "@/components/ThreadinaryLogo";
-import { useTheme } from "@/components/ThemeProvider";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { theme, toggle } = useTheme();
+  const [theme, setTheme] = useState<"light" | "dark">("light");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -59,8 +55,13 @@ export default function RegisterPage() {
     <div className="min-h-dvh flex flex-col items-center justify-center px-6 py-12 bg-[var(--bg)] bg-parchment">
       {/* Theme toggle */}
       <button
-        onClick={toggle}
-        className="absolute top-5 right-5 w-9 h-9 flex items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--ink-muted)] hover:text-[var(--ink)] transition-colors"
+        type="button"
+        onClick={() => {
+          const next = theme === "light" ? "dark" : "light";
+          setTheme(next);
+          document.documentElement.setAttribute("data-theme", next);
+        }}
+        className="absolute top-5 right-5 w-9 h-9 flex items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors"
         aria-label="Ganti tema"
       >
         {theme === "dark" ? (
@@ -81,13 +82,13 @@ export default function RegisterPage() {
         transition={{ duration: 0.5, ease: [0.34, 1.56, 0.64, 1] }}
       >
         <Link href="/" className="flex justify-center mb-8">
-          <ThreadinaryLogo size="md" animated />
+          <ThreadinaryLogo size="md" />
         </Link>
 
-        <h1 className="font-serif text-2xl font-semibold text-[var(--ink)] mb-1.5">
+        <h1 className="font-serif text-2xl font-semibold text-[var(--text)] mb-1.5">
           Mulai bangun duniamu
         </h1>
-        <p className="text-[var(--ink-muted)] text-sm mb-8">
+        <p className="text-[var(--text-secondary)] text-sm mb-8">
           Gratis selamanya untuk satu dunia. Tidak perlu kartu kredit.
         </p>
 
@@ -99,12 +100,12 @@ export default function RegisterPage() {
               animate={{ opacity: 1, scale: 1 }}
               className="flex flex-col items-center gap-4 py-8 text-center"
             >
-              <div className="w-16 h-16 rounded-full bg-[var(--sage-soft)] flex items-center justify-center">
-                <Check size={32} className="text-[var(--sage)]" />
+              <div className="w-16 h-16 rounded-full bg-[var(--sage-soft)] flex items-center justify-center text-[var(--sage)]">
+                ✓
               </div>
               <div>
-                <p className="font-serif text-lg font-semibold text-[var(--ink)]">Akun berhasil dibuat!</p>
-                <p className="text-sm text-[var(--ink-muted)] mt-1">Mengarahkan ke dashboard...</p>
+                <p className="font-serif text-lg font-semibold text-[var(--text)]">Akun berhasil dibuat!</p>
+                <p className="text-sm text-[var(--text-secondary)] mt-1">Mengarahkan ke dashboard...</p>
               </div>
             </motion.div>
           ) : (
@@ -114,38 +115,50 @@ export default function RegisterPage() {
               className="flex flex-col gap-4"
               exit={{ opacity: 0 }}
             >
-              <Input
-                label="Nama (opsional)"
-                id="register-name"
-                type="text"
-                placeholder="Nama penamu"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                icon={<User size={16} />}
-              />
+              <div>
+                <label className="text-xs font-semibold text-[var(--text-secondary)] mb-1 block">
+                  Nama (opsional)
+                </label>
+                <input
+                  id="register-name"
+                  type="text"
+                  placeholder="Nama penamu"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="form-input text-xs w-full"
+                />
+              </div>
 
-              <Input
-                label="Email"
-                id="register-email"
-                type="email"
-                placeholder="nama@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                icon={<Mail size={16} />}
-                required
-              />
-
-              <div className="flex flex-col gap-2">
-                <Input
-                  label="Password"
-                  id="register-password"
-                  type="password"
-                  placeholder="Minimal 8 karakter"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  icon={<Lock size={16} />}
+              <div>
+                <label className="text-xs font-semibold text-[var(--text-secondary)] mb-1 block">
+                  Email *
+                </label>
+                <input
+                  id="register-email"
+                  type="email"
+                  placeholder="nama@email.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="form-input text-xs w-full"
                   required
                 />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <div>
+                  <label className="text-xs font-semibold text-[var(--text-secondary)] mb-1 block">
+                    Password *
+                  </label>
+                  <input
+                    id="register-password"
+                    type="password"
+                    placeholder="Minimal 8 karakter"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="form-input text-xs w-full"
+                    required
+                  />
+                </div>
                 {/* Password strength bar */}
                 {password.length > 0 && (
                   <div className="flex gap-1">
@@ -185,10 +198,13 @@ export default function RegisterPage() {
                 )}
               </AnimatePresence>
 
-              <Button type="submit" loading={loading} className="w-full mt-1" size="lg" id="register-submit">
-                Buat akun
-                {!loading && <ArrowRight size={16} />}
-              </Button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="btn btn-primary w-full py-3 text-sm mt-1 flex items-center justify-center gap-2"
+              >
+                {loading ? "Membuat Akun..." : "Buat Akun"}
+              </button>
 
               <p className="text-xs text-center text-[var(--ink-muted)]">
                 Dengan mendaftar, kamu menyetujui syarat penggunaan kami.

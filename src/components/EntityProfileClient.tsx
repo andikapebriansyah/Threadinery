@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ThreadinaryLogo } from "./ThreadinaryLogo";
+import { ProjectNavbar } from "./ProjectNavbar";
 import { EditEntityModal } from "./EditEntityModal";
 import { SmartEntityPickerWithFilters } from "./SmartEntityPickerWithFilters";
 import {
@@ -20,6 +21,9 @@ import {
   KeyRound,
   FileText,
   AlertTriangle,
+  MapPin,
+  Clock,
+  GitFork,
 } from "lucide-react";
 
 interface EntityTypeItem {
@@ -83,6 +87,16 @@ const QUICK_CHIP_LABELS = [
   "Studies at",
   "Mentor",
   "Partner",
+];
+
+const LOCATION_QUICK_CHIP_LABELS = [
+  "Berada di sini",
+  "Tinggal di sini",
+  "Lahir di sini",
+  "Markas",
+  "Beroperasi di sini",
+  "Ditemukan di sini",
+  "Pernah ke sini",
 ];
 
 // Long narrative keys that need full-width display
@@ -349,6 +363,13 @@ export function EntityProfileClient({
   const totalRelationships = outgoingRel.length + incomingRel.length;
 
   const typeName = entity.type?.name || "Generic";
+  const isLocation = typeName.toLowerCase() === "location";
+
+  // For Location: collect all entities that have a relationship pointing to/from this location
+  const entitiesHere = [
+    ...outgoingRel.map((r) => ({ entity: r.target, label: r.label, relId: r.id })),
+    ...incomingRel.map((r) => ({ entity: r.source, label: r.label, relId: r.id })),
+  ].filter((x) => x.entity);
 
   const bgBadge =
     typeName === "Character"
@@ -372,102 +393,20 @@ export function EntityProfileClient({
   const candidateTargets = allEntities.filter((e) => e.id !== entityId);
 
   // Separate Short Key-Values vs Long Narrative Fields
-  const personalItems = Object.entries(metadataObj).filter(([k]) =>
-    PERSONAL_PHYSICAL_KEYS.includes(k)
-  );
   const psychItems = Object.entries(metadataObj).filter(([k]) =>
     PSYCHOLOGICAL_KEYS.includes(k)
   );
   const plotItems = Object.entries(metadataObj).filter(([k]) =>
     PLOT_SECRET_KEYS.includes(k)
   );
-  const otherItems = Object.entries(metadataObj).filter(
-    ([k]) =>
-      !PERSONAL_PHYSICAL_KEYS.includes(k) &&
-      !PSYCHOLOGICAL_KEYS.includes(k) &&
-      !PLOT_SECRET_KEYS.includes(k)
+  const generalItems = Object.entries(metadataObj).filter(
+    ([k]) => !PSYCHOLOGICAL_KEYS.includes(k) && !PLOT_SECRET_KEYS.includes(k)
   );
 
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] transition-colors duration-300">
-      {/* Topbar Navigation */}
-      <header className="topbar">
-        <div className="topbar-inner flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <Link
-              href={`/project/${projectId}/entities`}
-              className="inline-flex items-center gap-1.5 text-sm text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors"
-            >
-              <ArrowLeft size={16} />
-              <span>Daftar Entities</span>
-            </Link>
-            <div className="w-px h-5 bg-[var(--border)]" />
-            <ThreadinaryLogo size="sm" href="/dashboard" />
-          </div>
-
-          <div className="topbar-right flex items-center gap-3">
-            <button
-              className="theme-toggle"
-              aria-label="Ganti tema"
-              onClick={toggleTheme}
-            >
-              {theme === "dark" ? (
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  className="w-4 h-4"
-                >
-                  <circle cx="12" cy="12" r="4" />
-                  <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
-                </svg>
-              ) : (
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  className="w-4 h-4"
-                >
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />
-                </svg>
-              )}
-            </button>
-
-            {/* LINK TO GRAPH WITH FOCUS PARAM */}
-            <Link
-              href={`/project/${projectId}/graph?focus=${entity.id}`}
-              className="btn btn-ghost text-xs px-3.5 py-2 flex items-center gap-1.5 text-[var(--accent)] border border-[var(--accent-soft)] hover:bg-[var(--accent-soft)] transition-colors"
-              title="Buka entitas ini sebagai pusat di Relationship Graph"
-            >
-              <Network size={14} />
-              <span>Lihat di Mind-Map 🌐</span>
-            </Link>
-
-            {/* EDIT ENTITY BUTTON */}
-            <button
-              className="btn btn-primary text-xs px-4 py-2 flex items-center gap-1.5"
-              onClick={() => setIsEditModalOpen(true)}
-            >
-              <Edit size={14} />
-              <span>Edit Entity</span>
-            </button>
-
-            <button
-              className="btn btn-ghost text-xs text-[var(--rose)] border-[var(--border)] hover:border-[var(--rose)] flex items-center gap-1.5"
-              onClick={() => setIsDeleteModalOpen(true)}
-            >
-              <Trash2 size={14} />
-              <span>Hapus</span>
-            </button>
-
-            <div className="avatar" title={user.name || "User"}>
-              {initials}
-            </div>
-          </div>
-        </div>
-      </header>
+      {/* Unified Project Navbar */}
+      <ProjectNavbar projectId={projectId} projectName={projectName} user={user} />
 
       {/* Main Content Profile Wrap */}
       <main className="wrap py-10">
@@ -499,7 +438,7 @@ export function EntityProfileClient({
 
               {/* Tags Chips (§7.2) */}
               {entity.tags && entity.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-1.5 mb-5">
                   {entity.tags.map((tag) => (
                     <span
                       key={tag}
@@ -510,6 +449,45 @@ export function EntityProfileClient({
                   ))}
                 </div>
               )}
+
+              {/* Phase 8: Cross-Navigation Shortcut Buttons */}
+              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[var(--border)]/60">
+                <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mr-1">
+                  Pintasan Pandangan:
+                </span>
+                <Link
+                  href={`/project/${projectId}/graph?focus=${entity.id}`}
+                  className="btn btn-ghost text-xs py-1.5 px-3 flex items-center gap-1.5 text-[var(--accent)] border border-[var(--accent-soft)] hover:bg-[var(--accent-soft)] transition-colors rounded-xl"
+                  title="Fokus entitas ini di Mind-Map Graph"
+                >
+                  <Network size={13} />
+                  <span>Graph</span>
+                </Link>
+                <Link
+                  href={`/project/${projectId}/timeline?entity=${entity.id}`}
+                  className="btn btn-ghost text-xs py-1.5 px-3 flex items-center gap-1.5 text-[var(--accent)] border border-[var(--border)] hover:bg-[var(--bg)] transition-colors rounded-xl"
+                  title="Saring event entitas ini di Timeline"
+                >
+                  <Clock size={13} />
+                  <span>Timeline</span>
+                </Link>
+                <Link
+                  href={`/project/${projectId}/map?entity=${entity.id}`}
+                  className="btn btn-ghost text-xs py-1.5 px-3 flex items-center gap-1.5 text-[var(--sage)] border border-[var(--sage-soft)] hover:bg-[var(--sage-soft)] transition-colors rounded-xl"
+                  title="Lihat posisi marker entitas ini di Peta"
+                >
+                  <MapPin size={13} />
+                  <span>Peta</span>
+                </Link>
+                <Link
+                  href={`/project/${projectId}/family-tree?focus=${entity.id}`}
+                  className="btn btn-ghost text-xs py-1.5 px-3 flex items-center gap-1.5 text-[var(--accent)] border border-[var(--border)] hover:bg-[var(--bg)] transition-colors rounded-xl"
+                  title="Lihat posisi entitas ini di Pohon Keluarga"
+                >
+                  <GitFork size={13} />
+                  <span>Family Tree</span>
+                </Link>
+              </div>
             </div>
 
             {entity.imageUrl && (
@@ -549,19 +527,19 @@ export function EntityProfileClient({
 
               {/* Dossier Sections */}
               <div className="flex flex-col gap-7">
-                {/* 1. PROFIL & FISIK */}
-                {personalItems.length > 0 && (
+                {/* 1. ATRIBUT & DESAIN PROFIL */}
+                {generalItems.length > 0 && (
                   <div>
                     <div className="flex items-center gap-2 mb-3">
                       <User size={14} className="text-[var(--accent)]" />
                       <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--accent)] font-serif">
-                        PROFIL &amp; FISIK
+                        ATRIBUT &amp; DESAIN PROFIL
                       </h3>
                       <div className="flex-1 h-px bg-[var(--border)]" />
                     </div>
 
                     <div className="bg-[var(--bg)] rounded-xl border border-[var(--border)] p-4 md:p-5 flex flex-col gap-3">
-                      {personalItems.map(([key, val]) => {
+                      {generalItems.map(([key, val]) => {
                         const isLong = LONG_TEXT_KEYS.includes(key) || String(val).length > 40;
                         return (
                           <div
@@ -647,165 +625,233 @@ export function EntityProfileClient({
                     </div>
                   </div>
                 )}
-
-                {/* 4. CATATAN & ATRIBUT KHUSUS */}
-                {otherItems.length > 0 && (
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <FileText size={14} className="text-[var(--text-secondary)]" />
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] font-serif">
-                        CATATAN &amp; ATRIBUT KHUSUS
-                      </h3>
-                      <div className="flex-1 h-px bg-[var(--border)]" />
-                    </div>
-
-                    <div className="bg-[var(--bg)] rounded-xl border border-[var(--border)] p-4 md:p-5 flex flex-col gap-3">
-                      {otherItems.map(([key, val]) => {
-                        const isLong = LONG_TEXT_KEYS.includes(key) || String(val).length > 40;
-                        return (
-                          <div
-                            key={key}
-                            className={`flex ${
-                              isLong ? "flex-col gap-1" : "flex-col sm:flex-row sm:items-center gap-2"
-                            } pb-2.5 border-b border-[var(--border)] last:border-none last:pb-0`}
-                          >
-                            <span className="text-xs font-semibold text-[var(--text-secondary)] w-36 shrink-0 font-serif">
-                              {key}
-                            </span>
-                            {!isLong && <span className="hidden sm:inline text-xs font-bold text-[var(--border)]">:</span>}
-                            <span className="text-sm font-medium text-[var(--text)] leading-relaxed">
-                              {String(val)}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           )}
 
-          {/* RELATIONSHIPS SECTION — SELALU TAMPIL DI PROFILE (§7.5) DENGAN LINK NAVIGASI (§8.6) */}
-          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-6 md:p-8 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-[var(--border)]">
-              <div>
-                <h2 className="font-serif text-xl font-semibold text-[var(--text)] flex items-center gap-2">
-                  <Network size={20} className="text-[var(--accent)]" />
-                  <span>RELATIONSHIPS ({totalRelationships})</span>
-                </h2>
-                <p className="text-xs text-[var(--text-secondary)] mt-1">
-                  Klik pada nama entitas untuk berpindah ke profilnya langsung (§8.6)
-                </p>
+          {/* RELATIONSHIPS / LOCATION ENTITIES SECTION */}
+          {isLocation ? (
+            /* ── SPECIAL: Location entity → show "Entitas yang Berada di Sini" ── */
+            <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-6 md:p-8 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-[var(--border)]">
+                <div>
+                  <h2 className="font-serif text-xl font-semibold text-[var(--text)] flex items-center gap-2">
+                    <MapPin size={20} className="text-[var(--sage)]" />
+                    <span>ENTITAS YANG BERADA DI SINI ({entitiesHere.length})</span>
+                  </h2>
+                  <p className="text-xs text-[var(--text-secondary)] mt-1">
+                    Karakter, objek, atau entitas lain yang berlokasi di <strong>{entity.name}</strong>
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="btn btn-primary text-xs px-4 py-2 flex items-center gap-1.5"
+                    onClick={() => {
+                      setRelLabel("Berada di sini");
+                      setIsAddRelModalOpen(true);
+                    }}
+                  >
+                    <Plus size={14} />
+                    <span>Tambah Entitas di Sini</span>
+                  </button>
+                  <Link
+                    href={`/project/${projectId}/map`}
+                    className="btn btn-ghost text-xs text-[var(--sage)] border-[var(--border)] hover:border-[var(--sage)] px-3 py-2 flex items-center gap-1.5"
+                  >
+                    <MapPin size={14} />
+                    <span>Lihat di Peta</span>
+                  </Link>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  className="btn btn-primary text-xs px-4 py-2 flex items-center gap-1.5"
-                  onClick={() => setIsAddRelModalOpen(true)}
-                >
-                  <Plus size={14} />
-                  <span>Tambah relationship</span>
-                </button>
-                <Link
-                  href={`/project/${projectId}/graph`}
-                  className="btn btn-ghost text-xs text-[var(--accent)] border-[var(--border)] hover:border-[var(--accent)] px-3 py-2 flex items-center gap-1.5"
-                >
-                  <Share2 size={14} />
-                  <span>Graph</span>
-                </Link>
-              </div>
+              {entitiesHere.length === 0 ? (
+                <div className="text-center py-8 text-[var(--text-secondary)] text-xs bg-[var(--bg)] rounded-xl border border-[var(--border)] p-6 flex flex-col items-center gap-3">
+                  <MapPin size={28} className="text-[var(--sage)] opacity-40" />
+                  <p>
+                    Belum ada entitas yang terhubung ke lokasi <strong>{entity.name}</strong>.
+                  </p>
+                  <p className="italic text-[9.5px]">
+                    Hubungkan karakter, organisasi, atau objek yang tinggal atau beroperasi di sini.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn btn-primary text-xs px-4 py-2 flex items-center gap-1.5 mt-2"
+                    onClick={() => {
+                      setRelLabel("Berada di sini");
+                      setIsAddRelModalOpen(true);
+                    }}
+                  >
+                    <Plus size={13} />
+                    <span>Tambah Entitas Pertama di Sini</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {entitiesHere.map(({ entity: ent, label, relId }) => {
+                    if (!ent) return null;
+                    return (
+                      <div
+                        key={relId}
+                        className="group flex items-center justify-between p-4 rounded-xl bg-[var(--bg)] border border-[var(--border)] text-sm hover:border-[var(--sage)] hover:shadow-sm transition-all cursor-pointer"
+                        onClick={() => router.push(`/project/${projectId}/entities/${ent.id}`)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-7 h-7 rounded-full bg-[var(--sage-soft)] text-[var(--sage)] flex items-center justify-center font-serif font-bold text-xs shrink-0">
+                            {ent.name[0]}
+                          </div>
+                          <div>
+                            <span className="font-serif font-semibold text-[var(--text)] group-hover:text-[var(--sage)] group-hover:underline flex items-center gap-1">
+                              {ent.name}
+                              <ArrowRight size={13} className="opacity-0 group-hover:opacity-100 transition-opacity text-[var(--sage)]" />
+                            </span>
+                            {ent.type && <span className="text-[9.5px] text-[var(--text-secondary)]">{ent.type.name}</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {label && (
+                            <span className="text-[10px] font-semibold text-[var(--sage)] bg-[var(--sage-soft)] px-2.5 py-0.5 rounded-md">
+                              {label}
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            className="text-[var(--text-secondary)] hover:text-[var(--rose)] p-1 text-xs"
+                            onClick={(e) => handleDeleteRelationship(e, relId)}
+                            title="Hapus entitas dari lokasi ini"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
+          ) : (
+            /* ── NORMAL: Non-location entity → show Relationships ──────────── */
+            <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-6 md:p-8 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-[var(--border)]">
+                <div>
+                  <h2 className="font-serif text-xl font-semibold text-[var(--text)] flex items-center gap-2">
+                    <Network size={20} className="text-[var(--accent)]" />
+                    <span>RELATIONSHIPS ({totalRelationships})</span>
+                  </h2>
+                  <p className="text-xs text-[var(--text-secondary)] mt-1">
+                    Klik pada nama entitas untuk berpindah ke profilnya langsung (§8.6)
+                  </p>
+                </div>
 
-            {totalRelationships === 0 ? (
-              <div className="text-center py-8 text-[var(--text-secondary)] text-xs bg-[var(--bg)] rounded-xl border border-[var(--border)] p-6 flex flex-col items-center gap-3">
-                <p>
-                  Belum ada hubungan relasi yang terhubung dengan <strong>{entity.name}</strong>.
-                </p>
-                <button
-                  className="btn btn-ghost text-xs text-[var(--accent)] border-[var(--border)] hover:border-[var(--accent)] flex items-center gap-1.5"
-                  onClick={() => setIsAddRelModalOpen(true)}
-                >
-                  <Plus size={14} />
-                  <span>Hubungkan dengan entity lain</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    className="btn btn-primary text-xs px-4 py-2 flex items-center gap-1.5"
+                    onClick={() => setIsAddRelModalOpen(true)}
+                  >
+                    <Plus size={14} />
+                    <span>Tambah relationship</span>
+                  </button>
+                  <Link
+                    href={`/project/${projectId}/graph`}
+                    className="btn btn-ghost text-xs text-[var(--accent)] border-[var(--border)] hover:border-[var(--accent)] px-3 py-2 flex items-center gap-1.5"
+                  >
+                    <Share2 size={14} />
+                    <span>Graph</span>
+                  </Link>
+                </div>
               </div>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {outgoingRel.map((rel) => {
-                  const targetId = rel.target?.id;
-                  const targetName = rel.target?.name || "Target Entity";
-                  return (
-                    <div
-                      key={rel.id}
-                      className="group flex items-center justify-between p-4 rounded-xl bg-[var(--bg)] border border-[var(--border)] text-sm hover:border-[var(--accent)] hover:shadow-sm transition-all cursor-pointer"
-                      onClick={() => {
-                        if (targetId) {
-                          router.push(`/project/${projectId}/entities/${targetId}`);
-                        }
-                      }}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs font-bold text-[var(--accent)] bg-[var(--accent-soft)] px-2.5 py-1 rounded-md">
-                          {rel.label}
-                        </span>
-                        <span className="text-xs text-[var(--text-secondary)] font-medium">→</span>
-                        <span className="font-serif font-semibold text-[var(--text)] group-hover:text-[var(--accent)] group-hover:underline flex items-center gap-1.5">
-                          <span>{targetName}</span>
-                          <ArrowRight size={13} className="opacity-0 group-hover:opacity-100 transition-opacity text-[var(--accent)]" />
-                        </span>
-                      </div>
 
-                      <button
-                        type="button"
-                        className="text-[var(--text-secondary)] hover:text-[var(--rose)] p-1 text-xs"
-                        onClick={(e) => handleDeleteRelationship(e, rel.id)}
-                        title="Hapus relasi"
+              {totalRelationships === 0 ? (
+                <div className="text-center py-8 text-[var(--text-secondary)] text-xs bg-[var(--bg)] rounded-xl border border-[var(--border)] p-6 flex flex-col items-center gap-3">
+                  <p>
+                    Belum ada hubungan relasi yang terhubung dengan <strong>{entity.name}</strong>.
+                  </p>
+                  <button
+                    className="btn btn-ghost text-xs text-[var(--accent)] border-[var(--border)] hover:border-[var(--accent)] flex items-center gap-1.5"
+                    onClick={() => setIsAddRelModalOpen(true)}
+                  >
+                    <Plus size={14} />
+                    <span>Hubungkan dengan entity lain</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {outgoingRel.map((rel) => {
+                    const targetId = rel.target?.id;
+                    const targetName = rel.target?.name || "Target Entity";
+                    return (
+                      <div
+                        key={rel.id}
+                        className="group flex items-center justify-between p-4 rounded-xl bg-[var(--bg)] border border-[var(--border)] text-sm hover:border-[var(--accent)] hover:shadow-sm transition-all cursor-pointer"
+                        onClick={() => {
+                          if (targetId) {
+                            router.push(`/project/${projectId}/entities/${targetId}`);
+                          }
+                        }}
                       >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  );
-                })}
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs font-bold text-[var(--accent)] bg-[var(--accent-soft)] px-2.5 py-1 rounded-md">
+                            {rel.label}
+                          </span>
+                          <span className="text-xs text-[var(--text-secondary)] font-medium">→</span>
+                          <span className="font-serif font-semibold text-[var(--text)] group-hover:text-[var(--accent)] group-hover:underline flex items-center gap-1.5">
+                            <span>{targetName}</span>
+                            <ArrowRight size={13} className="opacity-0 group-hover:opacity-100 transition-opacity text-[var(--accent)]" />
+                          </span>
+                        </div>
 
-                {incomingRel.map((rel) => {
-                  const sourceId = rel.source?.id;
-                  const sourceName = rel.source?.name || "Source Entity";
-                  return (
-                    <div
-                      key={rel.id}
-                      className="group flex items-center justify-between p-4 rounded-xl bg-[var(--bg)] border border-[var(--border)] text-sm hover:border-[var(--sage)] hover:shadow-sm transition-all cursor-pointer"
-                      onClick={() => {
-                        if (sourceId) {
-                          router.push(`/project/${projectId}/entities/${sourceId}`);
-                        }
-                      }}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="font-serif font-semibold text-[var(--text)] group-hover:text-[var(--sage)] group-hover:underline flex items-center gap-1.5">
-                          <span>{sourceName}</span>
-                          <ArrowRight size={13} className="opacity-0 group-hover:opacity-100 transition-opacity text-[var(--sage)]" />
-                        </span>
-                        <span className="text-xs text-[var(--text-secondary)] font-medium">→</span>
-                        <span className="text-xs font-bold text-[var(--sage)] bg-[var(--sage-soft)] px-2.5 py-1 rounded-md">
-                          {rel.label}
-                        </span>
+                        <button
+                          type="button"
+                          className="text-[var(--text-secondary)] hover:text-[var(--rose)] p-1 text-xs"
+                          onClick={(e) => handleDeleteRelationship(e, rel.id)}
+                          title="Hapus relasi"
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       </div>
+                    );
+                  })}
 
-                      <button
-                        type="button"
-                        className="text-[var(--text-secondary)] hover:text-[var(--rose)] p-1 text-xs"
-                        onClick={(e) => handleDeleteRelationship(e, rel.id)}
-                        title="Hapus relasi"
+                  {incomingRel.map((rel) => {
+                    const sourceId = rel.source?.id;
+                    const sourceName = rel.source?.name || "Source Entity";
+                    return (
+                      <div
+                        key={rel.id}
+                        className="group flex items-center justify-between p-4 rounded-xl bg-[var(--bg)] border border-[var(--border)] text-sm hover:border-[var(--sage)] hover:shadow-sm transition-all cursor-pointer"
+                        onClick={() => {
+                          if (sourceId) {
+                            router.push(`/project/${projectId}/entities/${sourceId}`);
+                          }
+                        }}
                       >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+                        <div className="flex items-center gap-3">
+                          <span className="font-serif font-semibold text-[var(--text)] group-hover:text-[var(--sage)] group-hover:underline flex items-center gap-1.5">
+                            <span>{sourceName}</span>
+                            <ArrowRight size={13} className="opacity-0 group-hover:opacity-100 transition-opacity text-[var(--sage)]" />
+                          </span>
+                          <span className="text-xs text-[var(--text-secondary)] font-medium">→</span>
+                          <span className="text-xs font-bold text-[var(--sage)] bg-[var(--sage-soft)] px-2.5 py-1 rounded-md">
+                            {rel.label}
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="text-[var(--text-secondary)] hover:text-[var(--rose)] p-1 text-xs"
+                          onClick={(e) => handleDeleteRelationship(e, rel.id)}
+                          title="Hapus relasi"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </main>
 
@@ -903,7 +949,7 @@ export function EntityProfileClient({
             style={{ maxWidth: "560px", width: "100%" }}
           >
             <div className="modal-header">
-              <h2>Tambah Relationship untuk {entity.name}</h2>
+              <h2>{isLocation ? `Tempatkan Entitas di ${entity.name}` : `Tambah Relationship untuk ${entity.name}`}</h2>
               <button
                 type="button"
                 className="modal-close"
@@ -923,10 +969,10 @@ export function EntityProfileClient({
               {/* 1. Quick Chip Labels (§7.5) */}
               <div className="form-group">
                 <label className="text-xs font-semibold text-[var(--text-secondary)]">
-                  Pilih Cepat Label Relasi (§7.5)
+                  {isLocation ? "Pilih Status / Relasi Lokasi" : "Pilih Cepat Label Relasi (§7.5)"}
                 </label>
                 <div className="flex flex-wrap gap-1.5 mt-1.5">
-                  {QUICK_CHIP_LABELS.map((chip) => (
+                  {(isLocation ? LOCATION_QUICK_CHIP_LABELS : QUICK_CHIP_LABELS).map((chip) => (
                     <button
                       key={chip}
                       type="button"

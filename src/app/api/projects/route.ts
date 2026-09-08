@@ -31,7 +31,7 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { name, description, genre, subGenre } = body;
+    const { name, description, genre, subGenre, calendarType } = body;
 
     if (!name?.trim()) {
       return NextResponse.json({ error: "Nama project wajib diisi" }, { status: 400 });
@@ -48,6 +48,7 @@ export async function POST(req: Request) {
     const cleanDesc = description?.trim() || null;
     const cleanGenre = genre?.trim() || "Fantasy";
     const cleanSubGenre = subGenre?.trim() || null;
+    const cleanCalendarType = calendarType?.trim() || "fantasy";
 
     let project: any = null;
 
@@ -59,6 +60,7 @@ export async function POST(req: Request) {
           description: cleanDesc,
           genre: cleanGenre,
           subGenre: cleanSubGenre,
+          calendarType: cleanCalendarType,
         } as any,
       });
     } catch (prismaErr) {
@@ -74,7 +76,8 @@ export async function POST(req: Request) {
       await prisma.$executeRaw`
         UPDATE "Project"
         SET "genre" = ${cleanGenre},
-            "subGenre" = ${cleanSubGenre}
+            "subGenre" = ${cleanSubGenre},
+            "calendarType" = ${cleanCalendarType}
         WHERE "id" = ${project.id}
       `;
     }

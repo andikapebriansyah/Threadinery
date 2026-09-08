@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { signOut } from "next-auth/react";
 import { ThreadinaryLogo } from "./ThreadinaryLogo";
 import {
   MoreVertical,
@@ -22,6 +23,8 @@ import {
   Coffee,
   Swords,
   BookMarked,
+  LogOut,
+  ExternalLink,
 } from "lucide-react";
 
 interface ProjectItem {
@@ -97,6 +100,7 @@ export function DashboardClient({ user }: DashboardClientProps) {
   const [newProjectDesc, setNewProjectDesc] = useState("");
   const [newProjectGenre, setNewProjectGenre] = useState("Fantasy");
   const [newProjectSubGenre, setNewProjectSubGenre] = useState("");
+  const [newProjectCalendarType, setNewProjectCalendarType] = useState("fantasy");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Card Menu State
@@ -108,6 +112,7 @@ export function DashboardClient({ user }: DashboardClientProps) {
   const [editDesc, setEditDesc] = useState("");
   const [editGenre, setEditGenre] = useState("");
   const [editSubGenre, setEditSubGenre] = useState("");
+  const [editCalendarType, setEditCalendarType] = useState("fantasy");
   const [isEditSubmitting, setIsEditSubmitting] = useState(false);
 
   // Multi-Step Delete Confirmation Modal State
@@ -116,16 +121,34 @@ export function DashboardClient({ user }: DashboardClientProps) {
   const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
   const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false);
 
+  // User Avatar Menu State
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const isDark = document.documentElement.getAttribute("data-theme") === "dark";
     setTheme(isDark ? "dark" : "light");
 
     fetchProjects();
 
-    const handleOutsideClick = () => setActiveMenuProjectId(null);
+    const handleOutsideClick = (e: MouseEvent) => {
+      setActiveMenuProjectId(null);
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setIsUserMenuOpen(false);
+      }
+    };
     window.addEventListener("click", handleOutsideClick);
     return () => window.removeEventListener("click", handleOutsideClick);
   }, []);
+
+  const handleLogout = async () => {
+    try {
+      await signOut({ callbackUrl: "/", redirect: false });
+    } catch (e) {
+      console.warn("SignOut error:", e);
+    }
+    window.location.href = "/";
+  };
 
   const fetchProjects = async () => {
     try {
@@ -181,6 +204,7 @@ export function DashboardClient({ user }: DashboardClientProps) {
           description: newProjectDesc.trim(),
           genre: newProjectGenre,
           subGenre: newProjectSubGenre.trim(),
+          calendarType: newProjectCalendarType,
         }),
       });
 
@@ -191,6 +215,7 @@ export function DashboardClient({ user }: DashboardClientProps) {
         setNewProjectDesc("");
         setNewProjectGenre("Fantasy");
         setNewProjectSubGenre("");
+        setNewProjectCalendarType("fantasy");
         router.push(`/project/${created.id}`);
       }
     } catch (err) {
@@ -207,6 +232,7 @@ export function DashboardClient({ user }: DashboardClientProps) {
     setEditDesc(p.description || "");
     setEditGenre(p.genre || "Fantasy");
     setEditSubGenre(p.subGenre || "");
+    setEditCalendarType((p as any).calendarType || "fantasy");
     setActiveMenuProjectId(null);
   };
 
@@ -225,6 +251,7 @@ export function DashboardClient({ user }: DashboardClientProps) {
           description: editDesc.trim(),
           genre: editGenre,
           subGenre: editSubGenre.trim(),
+          calendarType: editCalendarType,
         }),
       });
 
@@ -352,8 +379,52 @@ export function DashboardClient({ user }: DashboardClientProps) {
               <span>Dunia baru</span>
             </button>
 
-            <div className="avatar" title={user.name || user.email || "User"}>
-              {initials}
+            {/* User Avatar & Dropdown Menu */}
+            <div className="relative" ref={userMenuRef}>
+              <button
+                type="button"
+                className="avatar cursor-pointer hover:ring-2 hover:ring-[var(--accent)] transition-all flex items-center justify-center font-bold"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsUserMenuOpen((prev) => !prev);
+                }}
+                title={user.name || user.email || "User"}
+                aria-label="Menu Pengguna"
+              >
+                {initials}
+              </button>
+
+              {isUserMenuOpen && (
+                <div
+                  className="absolute right-0 top-11 w-64 bg-[var(--surface)] border border-[var(--border)] rounded-2xl shadow-xl p-2 z-50 flex flex-col gap-1 text-xs font-medium animate-in fade-in zoom-in-95 duration-150"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="px-3 py-2 border-b border-[var(--border)]">
+                    <p className="font-semibold text-[var(--text)] truncate">{user.name || "Penulis"}</p>
+                    <p className="text-[11px] text-[var(--text-secondary)] truncate">{user.email || "writer@threadinery.dev"}</p>
+                  </div>
+
+                  <Link
+                    href="/"
+                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-[var(--text)] hover:bg-[var(--bg)] transition-colors"
+                    onClick={() => setIsUserMenuOpen(false)}
+                  >
+                    <ExternalLink size={13} className="text-[var(--text-secondary)]" />
+                    <span>Halaman Depan (Landing)</span>
+                  </Link>
+
+                  <div className="h-px bg-[var(--border)] my-1" />
+
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-[var(--rose)] hover:bg-[var(--rose-soft)] transition-colors w-full text-left cursor-pointer font-semibold"
+                    onClick={handleLogout}
+                  >
+                    <LogOut size={13} />
+                    <span>Keluar (Logout)</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -431,7 +502,10 @@ export function DashboardClient({ user }: DashboardClientProps) {
                   <div
                     key={p.id}
                     className={`book-card ${p.spineClass || "book-spine-a"} relative group cursor-pointer`}
-                    onClick={() => router.push(`/project/${p.id}`)}
+                    onClick={() => {
+                      sessionStorage.removeItem(`threadinery_book_chosen_${p.id}`);
+                      router.push(`/project/${p.id}`);
+                    }}
                   >
                     <div className="book-top flex items-center justify-between">
                       {/* Cohesive Threadinery SVG Icon Badge */}
@@ -621,11 +695,95 @@ export function DashboardClient({ user }: DashboardClientProps) {
                 <label>Deskripsi Singkat</label>
                 <textarea
                   className="form-input text-xs"
-                  rows={3}
+                  rows={2}
                   placeholder="Gambaran umum dunia atau konflik utama cerita..."
                   value={newProjectDesc}
                   onChange={(e) => setNewProjectDesc(e.target.value)}
                 />
+              </div>
+
+              {/* TIPE FORMAT PENANGGALAN WAKTU DUNIA (§Calendar System) */}
+              <div className="form-group border-t border-[var(--border)] pt-3 mt-1">
+                <label className="text-xs font-bold font-serif text-[var(--accent)] mb-1 block">
+                  Tipe Format Penanggalan Waktu Dunia *
+                </label>
+                <p className="text-[11px] text-[var(--text-secondary)] mb-2.5 leading-relaxed">
+                  Pilih sistem waktu utama agar urutan kronologi peristiwa di dunia ini selalu konsisten dan tidak tertukar:
+                </p>
+
+                <div className="flex flex-col gap-2">
+                  {/* Option 1: Fantasy */}
+                  <label
+                    className={`p-3 rounded-xl border text-xs cursor-pointer transition-all flex items-start gap-2.5 ${
+                      newProjectCalendarType === "fantasy"
+                        ? "bg-[var(--surface)] border-[var(--accent)] shadow-sm font-semibold"
+                        : "bg-[var(--bg)] border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--accent)]"
+                    }`}
+                    onClick={() => setNewProjectCalendarType("fantasy")}
+                  >
+                    <input
+                      type="radio"
+                      name="newCalType"
+                      checked={newProjectCalendarType === "fantasy"}
+                      onChange={() => setNewProjectCalendarType("fantasy")}
+                      className="accent-[var(--accent)] mt-0.5"
+                    />
+                    <div>
+                      <div className="font-bold text-[var(--text)]">⚔️ Dunia Fiksi / Sistem Era &amp; Tahun (Fantasi, Kerajaan, Sci-Fi)</div>
+                      <div className="text-[10.5px] font-normal text-[var(--text-secondary)] mt-0.5 leading-snug">
+                        Menyusun event berdasarkan Era &amp; Angka Tahun (misal: <em>"Tahun 1420, Era Kedua"</em>). Komputer 100% tepat mengurutkan kronologi tanpa tertukar.
+                      </div>
+                    </div>
+                  </label>
+
+                  {/* Option 2: Real */}
+                  <label
+                    className={`p-3 rounded-xl border text-xs cursor-pointer transition-all flex items-start gap-2.5 ${
+                      newProjectCalendarType === "real"
+                        ? "bg-[var(--surface)] border-[var(--accent)] shadow-sm font-semibold"
+                        : "bg-[var(--bg)] border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--accent)]"
+                    }`}
+                    onClick={() => setNewProjectCalendarType("real")}
+                  >
+                    <input
+                      type="radio"
+                      name="newCalType"
+                      checked={newProjectCalendarType === "real"}
+                      onChange={() => setNewProjectCalendarType("real")}
+                      className="accent-[var(--accent)] mt-0.5"
+                    />
+                    <div>
+                      <div className="font-bold text-[var(--text)]">🌐 Dunia Nyata / Kalender Masehi (Sejarah, Romance, Modern)</div>
+                      <div className="text-[10.5px] font-normal text-[var(--text-secondary)] mt-0.5 leading-snug">
+                        Format tanggal standar masehi (misal: <em>"15 Agustus 1945"</em>, <em>"2024-05-10"</em>).
+                      </div>
+                    </div>
+                  </label>
+
+                  {/* Option 3: Custom */}
+                  <label
+                    className={`p-3 rounded-xl border text-xs cursor-pointer transition-all flex items-start gap-2.5 ${
+                      newProjectCalendarType === "custom"
+                        ? "bg-[var(--surface)] border-[var(--accent)] shadow-sm font-semibold"
+                        : "bg-[var(--bg)] border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--accent)]"
+                    }`}
+                    onClick={() => setNewProjectCalendarType("custom")}
+                  >
+                    <input
+                      type="radio"
+                      name="newCalType"
+                      checked={newProjectCalendarType === "custom"}
+                      onChange={() => setNewProjectCalendarType("custom")}
+                      className="accent-[var(--accent)] mt-0.5"
+                    />
+                    <div>
+                      <div className="font-bold text-[var(--text)]">🎨 Teks Bebas &amp; Custom Sequence (Novel Puitis / Eksperimental)</div>
+                      <div className="text-[10.5px] font-normal text-[var(--text-secondary)] mt-0.5 leading-snug">
+                        Format label waktu bebas puitis (misal: <em>"Musim Gugur Sebelum Pembantaian"</em>) dengan urutan custom.
+                      </div>
+                    </div>
+                  </label>
+                </div>
               </div>
 
               <div className="flex justify-end gap-3 mt-4 pt-2 border-t border-[var(--border)]">
@@ -718,10 +876,94 @@ export function DashboardClient({ user }: DashboardClientProps) {
                 <label>Deskripsi Singkat</label>
                 <textarea
                   className="form-input text-xs"
-                  rows={3}
+                  rows={2}
                   value={editDesc}
                   onChange={(e) => setEditDesc(e.target.value)}
                 />
+              </div>
+
+              {/* TIPE FORMAT PENANGGALAN WAKTU DUNIA EDIT (§Calendar System) */}
+              <div className="form-group border-t border-[var(--border)] pt-3 mt-1">
+                <label className="text-xs font-bold font-serif text-[var(--accent)] mb-1 block">
+                  Tipe Format Penanggalan Waktu Dunia *
+                </label>
+                <p className="text-[11px] text-[var(--text-secondary)] mb-2.5 leading-relaxed">
+                  Pilih sistem waktu utama agar urutan kronologi peristiwa di dunia ini selalu konsisten dan tidak tertukar:
+                </p>
+
+                <div className="flex flex-col gap-2">
+                  {/* Option 1: Fantasy */}
+                  <label
+                    className={`p-3 rounded-xl border text-xs cursor-pointer transition-all flex items-start gap-2.5 ${
+                      editCalendarType === "fantasy"
+                        ? "bg-[var(--surface)] border-[var(--accent)] shadow-sm font-semibold"
+                        : "bg-[var(--bg)] border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--accent)]"
+                    }`}
+                    onClick={() => setEditCalendarType("fantasy")}
+                  >
+                    <input
+                      type="radio"
+                      name="editCalType"
+                      checked={editCalendarType === "fantasy"}
+                      onChange={() => setEditCalendarType("fantasy")}
+                      className="accent-[var(--accent)] mt-0.5"
+                    />
+                    <div>
+                      <div className="font-bold text-[var(--text)]">⚔️ Dunia Fiksi / Sistem Era &amp; Tahun (Fantasi, Kerajaan, Sci-Fi)</div>
+                      <div className="text-[10.5px] font-normal text-[var(--text-secondary)] mt-0.5 leading-snug">
+                        Menyusun event berdasarkan Era &amp; Angka Tahun (misal: <em>"Tahun 1420, Era Kedua"</em>). Komputer 100% tepat mengurutkan kronologi tanpa tertukar.
+                      </div>
+                    </div>
+                  </label>
+
+                  {/* Option 2: Real */}
+                  <label
+                    className={`p-3 rounded-xl border text-xs cursor-pointer transition-all flex items-start gap-2.5 ${
+                      editCalendarType === "real"
+                        ? "bg-[var(--surface)] border-[var(--accent)] shadow-sm font-semibold"
+                        : "bg-[var(--bg)] border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--accent)]"
+                    }`}
+                    onClick={() => setEditCalendarType("real")}
+                  >
+                    <input
+                      type="radio"
+                      name="editCalType"
+                      checked={editCalendarType === "real"}
+                      onChange={() => setEditCalendarType("real")}
+                      className="accent-[var(--accent)] mt-0.5"
+                    />
+                    <div>
+                      <div className="font-bold text-[var(--text)]">🌐 Dunia Nyata / Kalender Masehi (Sejarah, Romance, Modern)</div>
+                      <div className="text-[10.5px] font-normal text-[var(--text-secondary)] mt-0.5 leading-snug">
+                        Format tanggal standar masehi (misal: <em>"15 Agustus 1945"</em>, <em>"2024-05-10"</em>).
+                      </div>
+                    </div>
+                  </label>
+
+                  {/* Option 3: Custom */}
+                  <label
+                    className={`p-3 rounded-xl border text-xs cursor-pointer transition-all flex items-start gap-2.5 ${
+                      editCalendarType === "custom"
+                        ? "bg-[var(--surface)] border-[var(--accent)] shadow-sm font-semibold"
+                        : "bg-[var(--bg)] border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--accent)]"
+                    }`}
+                    onClick={() => setEditCalendarType("custom")}
+                  >
+                    <input
+                      type="radio"
+                      name="editCalType"
+                      checked={editCalendarType === "custom"}
+                      onChange={() => setEditCalendarType("custom")}
+                      className="accent-[var(--accent)] mt-0.5"
+                    />
+                    <div>
+                      <div className="font-bold text-[var(--text)]">🎨 Teks Bebas &amp; Custom Sequence (Novel Puitis / Eksperimental)</div>
+                      <div className="text-[10.5px] font-normal text-[var(--text-secondary)] mt-0.5 leading-snug">
+                        Format label waktu bebas puitis (misal: <em>"Musim Gugur Sebelum Pembantaian"</em>) dengan urutan custom.
+                      </div>
+                    </div>
+                  </label>
+                </div>
               </div>
 
               <div className="flex justify-end gap-3 mt-4 pt-2 border-t border-[var(--border)]">

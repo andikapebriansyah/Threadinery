@@ -12,6 +12,7 @@ export async function GET(
   const typeId = searchParams.get("typeId");
   const tag = searchParams.get("tag");
   const search = searchParams.get("search");
+  const bookId = searchParams.get("bookId");
 
   try {
     const whereClause: any = { projectId };
@@ -32,7 +33,7 @@ export async function GET(
       ];
     }
 
-    const entities = await prisma.entity.findMany({
+    let entities = await prisma.entity.findMany({
       where: whereClause,
       include: {
         type: true,
@@ -45,6 +46,18 @@ export async function GET(
       },
       orderBy: { updatedAt: "desc" },
     });
+
+    // Book-Scoped Appearance Filter
+    if (bookId && bookId !== "all") {
+      entities = entities.filter((e) => {
+        const meta = e.metadata as any;
+        const metaBooks = Array.isArray(meta?.bookIds) ? meta.bookIds : [];
+        if (metaBooks.includes(bookId)) return true;
+        // If entity has no specific bookIds recorded yet, show in default roster
+        if (metaBooks.length === 0) return true;
+        return false;
+      });
+    }
 
     return NextResponse.json(entities);
   } catch (err: any) {
@@ -65,21 +78,29 @@ export async function POST(
 
   try {
     const body = await req.json();
-    const { name, typeId, description, tags, metadata, imageUrl, status, initialRelationship } = body;
+    const { name, typeId, description, tags, metadata, imageUrl, status, bookId, initialRelationship } = body;
 
-    if (!name?.trim() || !typeId || !description?.trim()) {
+    if (!name?.trim() || !typeId) {
       return NextResponse.json(
-        { error: "Nama, Tipe, dan Deskripsi wajib diisi" },
+        { error: "Nama dan Tipe wajib diisi" },
         { status: 400 }
       );
     }
 
     const cleanName = name.trim();
-    const cleanDesc = description.trim();
+    const cleanDesc = description?.trim() || null;
 
     const cleanTags = Array.isArray(tags)
       ? tags.map((t: string) => t.trim()).filter(Boolean)
       : [];
+
+    const finalMetadata: any = metadata || {};
+    if (bookId && typeof bookId === "string") {
+      const existingBooks = Array.isArray(finalMetadata.bookIds) ? finalMetadata.bookIds : [];
+      if (!existingBooks.includes(bookId)) {
+        finalMetadata.bookIds = [...existingBooks, bookId];
+      }
+    }
 
     const entity = await prisma.entity.create({
       data: {
@@ -88,7 +109,7 @@ export async function POST(
         name: cleanName,
         description: cleanDesc,
         tags: cleanTags,
-        metadata: metadata || {},
+        metadata: finalMetadata,
         imageUrl: imageUrl?.trim() || null,
         status: status?.trim() || null,
       },

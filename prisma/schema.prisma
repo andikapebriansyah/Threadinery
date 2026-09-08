@@ -25,10 +25,11 @@ model Project {
   userId      String
   name        String
   description String?
-  genre       String?
-  subGenre    String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  genre        String?
+  subGenre     String?
+  calendarType String?  @default("fantasy")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   books         Book[]
@@ -82,7 +83,8 @@ model Entity {
   relationshipsTo   Relationship[]    @relation("TargetEntity")
   eventLinks        EventEntity[]
   location          EntityLocation?
-  statusChanges     EntityStatusLog[]
+  statusChanges    EntityStatusLog[]
+  attributeChanges EntityAttributeLog[]
 }
 
 // ── Relationship ─────────────────────────────
@@ -127,6 +129,19 @@ model EntityStatusLog {
   event  Event? @relation(fields: [eventId], references: [id])
 }
 
+model EntityAttributeLog {
+  id            String   @id @default(cuid())
+  entityId      String
+  attributeName String
+  oldValue      String?
+  newValue      String
+  changedAt     DateTime @default(now())
+  eventId       String?
+
+  entity Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  event  Event? @relation(fields: [eventId], references: [id])
+}
+
 // ── Event ─────────────────────────────────────
 model Event {
   id          String  @id @default(cuid())
@@ -138,6 +153,7 @@ model Event {
 
   chapterId      String?
   orderInChapter Int?
+  orderIndex     Int     @default(0)
   writingStatus  String?
 
   createdAt DateTime @default(now())
@@ -149,6 +165,7 @@ model Event {
   entitiesInvolved    EventEntity[]
   relationshipChanges EventRelationshipChange[]
   statusChanges       EntityStatusLog[]
+  attributeChanges    EntityAttributeLog[]
   relationshipLogs    RelationshipLog[]
 }
 

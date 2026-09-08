@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ThreadinaryLogo } from "./ThreadinaryLogo";
+import { ProjectNavbar } from "./ProjectNavbar";
 import { CreateEntityModal } from "./CreateEntityModal";
 import {
   Users,
@@ -12,6 +13,15 @@ import {
   ArrowLeft,
   ChevronDown,
   Tag as TagIcon,
+  LayoutGrid,
+  List,
+  FolderTree,
+  ArrowRight,
+  ChevronRight,
+  BookOpen,
+  Sparkles,
+  X,
+  Check,
 } from "lucide-react";
 
 interface EntityTypeItem {
@@ -65,28 +75,47 @@ export function EntitiesListClient({
 
   const [entities, setEntities] = useState<EntityItem[]>(initialEntities);
   const [entityTypes, setEntityTypes] = useState<EntityTypeItem[]>(initialEntityTypes);
+  const [books, setBooks] = useState<any[]>([]);
   const [loading, setLoading] = useState(initialEntities.length === 0);
 
-  // Filters (§7.2)
+  // Filters & View Modes (§7.2 & §7.3)
+  const [selectedBookFilter, setSelectedBookFilter] = useState<string>("all");
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>("all");
   const [selectedTagFilter, setSelectedTagFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [viewMode, setViewMode] = useState<"grid" | "table" | "grouped">("grid");
 
-  // Modal State
+  // Modal States
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isCameoModalOpen, setIsCameoModalOpen] = useState(false);
+  const [cameoSubmitting, setCameoSubmitting] = useState(false);
+  const [cameoSearchQuery, setCameoSearchQuery] = useState("");
 
   useEffect(() => {
     const isDark = document.documentElement.getAttribute("data-theme") === "dark";
     setTheme(isDark ? "dark" : "light");
 
     fetchTypesAndEntities();
+
+    // Listen to book selection from universal topbar (ProjectNavbar)
+    const handleBookChange = (e: any) => {
+      if (e.detail?.bookId) {
+        setSelectedBookFilter(e.detail.bookId);
+      }
+    };
+    window.addEventListener("threadinery:book_change", handleBookChange);
+
+    return () => {
+      window.removeEventListener("threadinery:book_change", handleBookChange);
+    };
   }, [projectId]);
 
   const fetchTypesAndEntities = async () => {
     try {
-      const [typesRes, entitiesRes] = await Promise.all([
+      const [typesRes, entitiesRes, booksRes] = await Promise.all([
         fetch(`/api/projects/${projectId}/entity-types`),
         fetch(`/api/projects/${projectId}/entities`),
+        fetch(`/api/projects/${projectId}/books`),
       ]);
 
       if (typesRes.ok) {
@@ -98,6 +127,17 @@ export function EntitiesListClient({
         const entitiesData = await entitiesRes.json();
         if (Array.isArray(entitiesData)) {
           setEntities(entitiesData);
+        }
+      }
+
+      if (booksRes.ok) {
+        const booksData = await booksRes.json();
+        if (Array.isArray(booksData) && booksData.length > 0) {
+          setBooks(booksData);
+          const savedBookId = localStorage.getItem(`threadinery_active_book_${projectId}`);
+          const validSaved = booksData.find((b: any) => b.id === savedBookId);
+          const activeId = validSaved ? validSaved.id : booksData[0].id;
+          setSelectedBookFilter(activeId);
         }
       }
     } catch (err) {
@@ -118,8 +158,54 @@ export function EntitiesListClient({
     new Set(entities.flatMap((e) => e.tags || []))
   ).sort();
 
-  // Filtered entities (§7.2 & §7.3)
-  const filteredEntities = entities.filter((e) => {
+  // Book-Filtered entities (Multi-Book Series Scoping)
+  const bookEntities = entities.filter((e) => {
+    if (selectedBookFilter === "all") return true;
+    const meta = e.metadata as any;
+    const metaBooks: string[] = Array.isArray(meta?.bookIds) ? meta.bookIds : [];
+    if (metaBooks.includes(selectedBookFilter)) return true;
+    // If first book is selected and entity has no explicit bookIds yet, treat as book 1
+    if (metaBooks.length === 0 && books.length > 0 && selectedBookFilter === books[0].id) {
+      return true;
+    }
+    return false;
+  });
+
+  // Entities from other books available for Cameo inclusion into current book
+  const cameoCandidates = entities.filter((e) => {
+    if (selectedBookFilter === "all") return false;
+    const meta = e.metadata as any;
+    const metaBooks: string[] = Array.isArray(meta?.bookIds) ? meta.bookIds : [];
+    const isInCurrentBook =
+      metaBooks.includes(selectedBookFilter) ||
+      (metaBooks.length === 0 && books.length > 0 && selectedBookFilter === books[0].id);
+    return !isInCurrentBook;
+  });
+
+  // Include an existing entity into current book
+  const handleIncludeCameo = async (entityId: string) => {
+    if (!selectedBookFilter || selectedBookFilter === "all") return;
+    setCameoSubmitting(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/entities/${entityId}/include-book`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookId: selectedBookFilter }),
+      });
+
+      if (res.ok) {
+        const updated = await res.json();
+        setEntities((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+      }
+    } catch (err) {
+      console.error("Include cameo error:", err);
+    } finally {
+      setCameoSubmitting(false);
+    }
+  };
+
+  // Filtered entities based on Search, Type, & Tag
+  const filteredEntities = bookEntities.filter((e) => {
     if (selectedTypeFilter !== "all" && e.typeId !== selectedTypeFilter) {
       return false;
     }
@@ -139,89 +225,50 @@ export function EntitiesListClient({
   // Filter type tabs: strictly 5 default types + active custom types
   const visibleTypeTabs = entityTypes.filter((t) => {
     const isBuiltIn = DEFAULT_TYPE_NAMES.includes(t.name);
-    const count = entities.filter((e) => e.typeId === t.id).length;
+    const count = bookEntities.filter((e) => e.typeId === t.id).length;
     return isBuiltIn || count > 0;
   });
 
-  const initials = user.name
-    ? user.name
-        .split(" ")
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2)
-    : "RA";
+  const currentBookObj = books.find((b) => b.id === selectedBookFilter);
 
+  const initials = user.name
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] transition-colors duration-300">
-      {/* Topbar */}
-      <header className="topbar">
-        <div className="topbar-inner flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <Link
-              href={`/project/${projectId}`}
-              className="inline-flex items-center gap-1.5 text-sm text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors"
-            >
-              <ArrowLeft size={16} />
-              <span>{projectName}</span>
-            </Link>
-            <div className="w-px h-5 bg-[var(--border)]" />
-            <ThreadinaryLogo size="sm" href="/dashboard" />
-          </div>
-
-          <div className="topbar-right flex items-center gap-3">
-            <button
-              className="theme-toggle"
-              aria-label="Ganti tema"
-              onClick={toggleTheme}
-            >
-              {theme === "dark" ? (
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  className="w-4 h-4"
-                >
-                  <circle cx="12" cy="12" r="4" />
-                  <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
-                </svg>
-              ) : (
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  className="w-4 h-4"
-                >
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />
-                </svg>
-              )}
-            </button>
-
-            <button
-              className="btn btn-primary whitespace-nowrap shrink-0"
-              onClick={() => setIsCreateModalOpen(true)}
-            >
-              <Plus size={16} />
-              <span>Entity baru</span>
-            </button>
-
-            <div className="avatar" title={user.name || "User"}>
-              {initials}
-            </div>
-          </div>
-        </div>
-      </header>
+      {/* Unified Project Navbar */}
+      <ProjectNavbar projectId={projectId} projectName={projectName} user={user} />
 
       {/* Main Content */}
       <main className="wrap py-10">
-        <div className="page-head mb-8">
+        <div className="page-head mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1>Entities</h1>
             <p className="sub">
-              {entities.length} entitas tercatat di {projectName}
+              {bookEntities.length} entitas tercatat {selectedBookFilter !== "all" && currentBookObj ? `pada ${currentBookObj.title}` : `di ${projectName}`}
             </p>
+          </div>
+
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {/* Cameo Inclusion Button (Only active when viewing a specific book and candidates exist) */}
+            {selectedBookFilter !== "all" && cameoCandidates.length > 0 && (
+              <button
+                type="button"
+                className="btn btn-ghost text-xs py-2 px-3.5 flex items-center gap-1.5 text-[var(--accent)] border border-[var(--accent-soft)] hover:bg-[var(--accent-soft)] transition-colors rounded-xl font-semibold"
+                onClick={() => setIsCameoModalOpen(true)}
+                title="Masukkan entitas dari buku lain sebagai cameo di buku ini"
+              >
+                <Sparkles size={14} />
+                <span>+ Ambil dari Buku Lain ({cameoCandidates.length})</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              className="btn btn-primary text-xs px-4 py-2 flex items-center gap-1.5"
+              onClick={() => setIsCreateModalOpen(true)}
+            >
+              <Plus size={14} />
+              <span>+ Buat Entity Baru</span>
+            </button>
           </div>
         </div>
 
@@ -237,7 +284,7 @@ export function EntitiesListClient({
               }`}
               onClick={() => setSelectedTypeFilter("all")}
             >
-              Semua Tipe ({entities.length})
+              Semua Tipe ({bookEntities.length})
             </button>
 
             {visibleTypeTabs.map((t) => {
@@ -285,6 +332,51 @@ export function EntitiesListClient({
               </div>
             )}
 
+            {/* View Mode Switcher Button Group */}
+            <div className="flex items-center gap-1 bg-[var(--surface)] border border-[var(--border)] p-1 rounded-xl shrink-0">
+              <button
+                type="button"
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  viewMode === "grid"
+                    ? "bg-[var(--accent-soft)] text-[var(--accent)] shadow-xs"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text)]"
+                }`}
+                onClick={() => setViewMode("grid")}
+                title="Tampilan Kartu Grid"
+              >
+                <LayoutGrid size={13} />
+                <span className="hidden sm:inline">Kartu</span>
+              </button>
+
+              <button
+                type="button"
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  viewMode === "table"
+                    ? "bg-[var(--accent-soft)] text-[var(--accent)] shadow-xs"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text)]"
+                }`}
+                onClick={() => setViewMode("table")}
+                title="Tampilan Tabel Padat Ringkas"
+              >
+                <List size={13} />
+                <span className="hidden sm:inline">Tabel</span>
+              </button>
+
+              <button
+                type="button"
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  viewMode === "grouped"
+                    ? "bg-[var(--accent-soft)] text-[var(--accent)] shadow-xs"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text)]"
+                }`}
+                onClick={() => setViewMode("grouped")}
+                title="Tampilan Dikelompokkan per Tipe"
+              >
+                <FolderTree size={13} />
+                <span className="hidden sm:inline">Kelompok</span>
+              </button>
+            </div>
+
             {/* Search Input */}
             <div className="search flex-1 md:w-64">
               <Search size={14} className="text-[var(--text-secondary)]" />
@@ -299,7 +391,7 @@ export function EntitiesListClient({
           </div>
         </div>
 
-        {/* Entities Grid Section */}
+        {/* Entities Section */}
         {loading ? (
           <div className="text-center py-20 text-[var(--text-secondary)]">
             Memuat daftar entitas...
@@ -329,7 +421,130 @@ export function EntitiesListClient({
               <span>Buat Entity Baru</span>
             </button>
           </div>
+        ) : viewMode === "table" ? (
+          /* Mode 2: Tabel Padat High-Density (Mencegah Overwhelm saat Roster Banyak) */
+          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl overflow-hidden shadow-xs">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-[var(--bg)] border-b border-[var(--border)] text-[var(--text-secondary)] font-semibold uppercase text-[10.5px] tracking-wider">
+                  <th className="py-3 px-4">Nama Entitas</th>
+                  <th className="py-3 px-4">Tipe</th>
+                  <th className="py-3 px-4 hidden md:table-cell">Deskripsi Singkat</th>
+                  <th className="py-3 px-4 hidden sm:table-cell">Tags</th>
+                  <th className="py-3 px-4 text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border)]/60">
+                {filteredEntities.map((entity) => {
+                  const typeName = entity.type?.name || "Generic";
+                  return (
+                    <tr
+                      key={entity.id}
+                      className="hover:bg-[var(--bg)]/70 transition-colors cursor-pointer group"
+                      onClick={() => router.push(`/project/${projectId}/entities/${entity.id}`)}
+                    >
+                      <td className="py-2.5 px-4 font-semibold text-[var(--text)] group-hover:text-[var(--accent)] transition-colors">
+                        <div className="flex items-center gap-2.5">
+                          {entity.imageUrl ? (
+                            <img
+                              src={entity.imageUrl}
+                              alt={entity.name}
+                              className="w-7 h-7 rounded-lg object-cover border border-[var(--border)] shrink-0"
+                            />
+                          ) : (
+                            <div className="w-7 h-7 rounded-lg bg-[var(--accent-soft)] text-[var(--accent)] font-serif font-bold text-xs flex items-center justify-center shrink-0">
+                              {entity.name[0]}
+                            </div>
+                          )}
+                          <span className="truncate max-w-[180px]">{entity.name}</span>
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-4">
+                        <span className="text-[10.5px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full bg-[var(--bg)] border border-[var(--border)] text-[var(--text-secondary)]">
+                          {typeName}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-4 text-[var(--text-secondary)] truncate max-w-[220px] hidden md:table-cell">
+                        {entity.description || "-"}
+                      </td>
+                      <td className="py-2.5 px-4 hidden sm:table-cell">
+                        <div className="flex flex-wrap gap-1 max-w-[160px]">
+                          {entity.tags && entity.tags.length > 0 ? (
+                            entity.tags.slice(0, 2).map((t) => (
+                              <span key={t} className="text-[10px] text-[var(--text-secondary)] bg-[var(--bg)] px-1.5 py-0.5 rounded border border-[var(--border)]">
+                                #{t}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-[10px] text-[var(--text-secondary)] opacity-50">-</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-4 text-right">
+                        <span className="text-[11px] font-semibold text-[var(--accent)] group-hover:underline inline-flex items-center gap-0.5">
+                          Profil <ArrowRight size={11} />
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : viewMode === "grouped" ? (
+          /* Mode 3: Dikelompokkan per Tipe Entitas */
+          <div className="flex flex-col gap-6">
+            {entityTypes.map((t) => {
+              const typeItems = filteredEntities.filter((e) => e.typeId === t.id);
+              if (typeItems.length === 0) return null;
+
+              return (
+                <div key={t.id} className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 shadow-xs">
+                  <div className="flex items-center justify-between gap-3 mb-4 pb-2 border-b border-[var(--border)]">
+                    <h3 className="font-serif font-semibold text-base text-[var(--text)] flex items-center gap-2">
+                      <FolderTree size={16} className="text-[var(--accent)]" />
+                      <span>{t.name}</span>
+                      <span className="text-xs text-[var(--text-secondary)] font-sans font-normal">
+                        ({typeItems.length})
+                      </span>
+                    </h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {typeItems.map((entity) => (
+                      <div
+                        key={entity.id}
+                        className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg)] hover:border-[var(--accent)] hover:bg-[var(--surface)] transition-all cursor-pointer group flex items-start gap-3"
+                        onClick={() => router.push(`/project/${projectId}/entities/${entity.id}`)}
+                      >
+                        {entity.imageUrl ? (
+                          <img
+                            src={entity.imageUrl}
+                            alt={entity.name}
+                            className="w-10 h-10 rounded-lg object-cover border border-[var(--border)] shrink-0"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-lg bg-[var(--accent-soft)] text-[var(--accent)] font-serif font-bold text-sm flex items-center justify-center shrink-0">
+                            {entity.name[0]}
+                          </div>
+                        )}
+                        <div className="truncate flex-1">
+                          <h4 className="font-serif font-semibold text-xs text-[var(--text)] group-hover:text-[var(--accent)] transition-colors truncate">
+                            {entity.name}
+                          </h4>
+                          <p className="text-[11px] text-[var(--text-secondary)] line-clamp-2 mt-0.5 leading-normal">
+                            {entity.description || "Belum ada deskripsi."}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         ) : (
+          /* Mode 1: Kartu Grid Standar */
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {filteredEntities.map((entity) => {
               const typeName = entity.type?.name || "Generic";
@@ -420,6 +635,114 @@ export function EntitiesListClient({
         }}
         entityTypes={entityTypes}
       />
+
+      {/* Cameo / Cross-Book Inclusion Modal */}
+      {isCameoModalOpen && (
+        <div
+          className="modal-overlay"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setIsCameoModalOpen(false);
+          }}
+          style={{ zIndex: 100 }}
+        >
+          <div
+            className="modal-content overflow-y-auto max-h-[85vh]"
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{ maxWidth: "560px", width: "100%" }}
+          >
+            <div className="modal-header">
+              <div className="flex items-center gap-2">
+                <Sparkles size={18} className="text-[var(--accent)]" />
+                <h2 className="font-serif font-semibold text-lg text-[var(--text)]">
+                  Ambil Entitas dari Buku Lain
+                </h2>
+              </div>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => setIsCameoModalOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-[var(--text-secondary)] mb-4">
+              Pilih entitas yang sudah ada di duniamu untuk dimasukkan ke dalam <strong>{currentBookObj?.title || "Buku ini"}</strong> tanpa perlu mengetik ulang biodatanya.
+            </p>
+
+            {/* Search filter in cameo modal */}
+            <div className="search mb-4">
+              <Search size={14} className="text-[var(--text-secondary)]" />
+              <input
+                type="text"
+                placeholder="Cari nama entitas..."
+                value={cameoSearchQuery}
+                onChange={(e) => setCameoSearchQuery(e.target.value)}
+                className="text-xs"
+              />
+            </div>
+
+            <div className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1">
+              {cameoCandidates
+                .filter((c) =>
+                  !cameoSearchQuery.trim() ||
+                  c.name.toLowerCase().includes(cameoSearchQuery.toLowerCase())
+                )
+                .map((candidate) => {
+                  const typeName = candidate.type?.name || "Generic";
+                  return (
+                    <div
+                      key={candidate.id}
+                      className="p-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] hover:border-[var(--accent)] hover:bg-[var(--surface)] transition-all flex items-center justify-between gap-3"
+                    >
+                      <div className="flex items-center gap-3 truncate">
+                        {candidate.imageUrl ? (
+                          <img
+                            src={candidate.imageUrl}
+                            alt={candidate.name}
+                            className="w-9 h-9 rounded-lg object-cover border border-[var(--border)] shrink-0"
+                          />
+                        ) : (
+                          <div className="w-9 h-9 rounded-lg bg-[var(--accent-soft)] text-[var(--accent)] font-serif font-bold text-sm flex items-center justify-center shrink-0">
+                            {candidate.name[0]}
+                          </div>
+                        )}
+                        <div className="truncate">
+                          <div className="font-semibold text-xs text-[var(--text)] truncate">
+                            {candidate.name}
+                          </div>
+                          <div className="text-[10.5px] text-[var(--text-secondary)] font-medium">
+                            {typeName} {candidate.tags?.length > 0 ? `· #${candidate.tags.join(" #")}` : ""}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="btn btn-primary text-xs py-1.5 px-3 flex items-center gap-1 shrink-0"
+                        disabled={cameoSubmitting}
+                        onClick={() => handleIncludeCameo(candidate.id)}
+                      >
+                        <Check size={12} />
+                        <span>Tambahkan</span>
+                      </button>
+                    </div>
+                  );
+                })}
+            </div>
+
+            <div className="flex justify-end mt-4 pt-3 border-t border-[var(--border)]">
+              <button
+                type="button"
+                className="btn btn-secondary text-xs px-4 py-2"
+                onClick={() => setIsCameoModalOpen(false)}
+              >
+                Selesai
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

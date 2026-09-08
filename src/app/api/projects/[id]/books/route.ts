@@ -7,6 +7,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: projectId } = await params;
+  console.log(">>> INSIDE BOOKS ROUTE GET for projectId:", projectId);
 
   try {
     const books = await prisma.book.findMany({

@@ -4,9 +4,32 @@ import type { NextRequest } from "next/server";
 export default async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Buka akses langsung: Jika di root (/), redirect langsung ke /dashboard
+  // Halaman landing (/) bebas diakses publik
   if (pathname === "/") {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
+    return NextResponse.next();
+  }
+
+  // Jika mengakses /login lama, arahkan ke landing page dengan query ?auth=login
+  if (pathname === "/login") {
+    return NextResponse.redirect(new URL("/?auth=login", req.url));
+  }
+
+  // Rute terlindungi (Dashboard & Project Workspace)
+  const isProtectedPath =
+    pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/project");
+
+  if (isProtectedPath) {
+    const sessionToken =
+      req.cookies.get("authjs.session-token")?.value ||
+      req.cookies.get("__Secure-authjs.session-token")?.value ||
+      req.cookies.get("next-auth.session-token")?.value ||
+      req.cookies.get("__Secure-next-auth.session-token")?.value;
+
+    // Jika sesi habis / sudah terlogout / belum pernah login -> redirect kembali ke landing page (/)
+    if (!sessionToken) {
+      return NextResponse.redirect(new URL("/", req.url));
+    }
   }
 
   return NextResponse.next();

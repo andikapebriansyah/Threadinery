@@ -80,9 +80,26 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
     }
   };
 
-  const handleDemoLogin = () => {
-    window.location.href = "/dashboard";
-    onClose();
+  const handleDemoLogin = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await signIn("credentials", {
+        email: "writer@threadinery.dev",
+        password: "demo",
+        redirect: false,
+      });
+
+      if (res?.error && res.error !== "undefined") {
+        throw new Error("Gagal masuk demo");
+      }
+
+      window.location.href = "/dashboard";
+    } catch (err: any) {
+      console.error("Demo login error:", err);
+      setError("Gagal masuk dengan akun demo.");
+      setLoading(false);
+    }
   };
 
   return (
